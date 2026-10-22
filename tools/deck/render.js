@@ -16,20 +16,17 @@ const path = require("path");
 
   // 1) auto-fit every card, then report
   const fit = await p.evaluate(() => window.__fit());
-  const byPage = {};
-  fit.forEach(f => { (byPage[f.p] = byPage[f.p] || []).push(f); });
-  let tooBig = [];
-  for (const k in byPage) {
-    byPage[k].forEach(f => {
-      if (f.cardH > f.avail + 1) tooBig.push(f);
-    });
-  }
-  console.log("pages fitted:", Object.keys(byPage).length);
-  const sizes = {};
-  fit.forEach(f => { (sizes[f.lang] = sizes[f.lang] || []).push(f.size); });
-  for (const l in sizes) {
-    const a = sizes[l].sort((x, y) => x - y);
-    console.log(` ${l}: min ${a[0]} max ${a[a.length - 1]} median ${a[(a.length / 2) | 0]}`);
+  console.log("pages fitted:", fit.length);
+  const tooBig = [];
+  for (const f of fit) for (const l of ["en", "fa"]) if (f[l].h > f.avail + 1) tooBig.push({ p: f.p, lang: l });
+  for (const l of ["en", "fa"]) {
+    const a = fit.map(f => f[l].size).sort((x, y) => x - y);
+    const lead = fit.map(f => f[l].lead).sort((x, y) => x - y);
+    const med = fit.map(f => f[l].med).sort((x, y) => x - y);
+    const p90 = fit.map(f => f[l].p90).sort((x, y) => x - y);
+    console.log(` ${l}: size ${a[0]}–${a[a.length - 1]} (median ${a[(a.length / 2) | 0]})` +
+                ` | leading ${lead[0]}–${lead[lead.length - 1]}` +
+                ` | gap median ${med[(med.length / 2) | 0]} worst p90 ${p90[p90.length - 1]}`);
   }
   console.log("overflowing cards:", JSON.stringify(tooBig));
 

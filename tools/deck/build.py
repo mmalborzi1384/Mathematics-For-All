@@ -140,11 +140,11 @@ body{ -webkit-print-color-adjust:exact; print-color-adjust:exact;
 
 .card{
   flex:1 1 auto; min-width:0;
+  display:flex; flex-direction:column; justify-content:center;
   background:var(--card); border:2.4px solid var(--beige); border-radius:15px;
   padding:14px 16px; font-size:var(--fs, 15px);
 }
-.card p{ text-align:justify; text-justify:inter-word; margin:0 0 .5em; }
-.pg.ragged .card p{ text-align:start; }
+.card p{ text-align:justify; text-justify:inter-word; text-align-last:auto; margin:0 0 .5em; }
 .card p:last-child{ margin-bottom:0; }
 .card.en{ direction:ltr; line-height:1.16; hyphens:auto; }
 .card.fa{ direction:rtl; line-height:1.58; font-family:"BNazanin", Tahoma, sans-serif; }
@@ -324,38 +324,129 @@ HEAD = """<!DOCTYPE html>
 
 SCRIPT = """
 <script>
-/* Auto-fit: pick the largest type size the page can hold, so a short
-   slide is set bigger instead of leaving a half-empty box. */
+/* Auto-fit, round two.
+   Round one simply grew the type until the box was full. On a short slide that
+   pushed the English column to 40 characters a line, and since Chromium here
+   has no hyphenation dictionary a justified line could then only be filled by
+   stretching its word spaces — the page looked broken.
+
+   So the size is chosen for *justification quality* first, fill second:
+   the largest pair whose typical word space stays close to normal wins, with
+   the Persian column kept at the site's ratio to the Latin one (B Nazanin runs
+   smaller than Times on the same em, so 1.143x reads as the same size). Any
+   vertical room left over is taken up by leading — never by looser words — and
+   the block is centred in its frame. Every card is justified, top to bottom. */
 window.__fit = function () {
   var out = [];
-  function fitCard(card, avail) {
-    var lang = card.getAttribute('data-fit');
-    var lo = 10.9, hi = lang === 'fa' ? 25 : 21.5, best = lo;
-    for (var s = hi; s >= lo; s -= 0.25) {
-      card.style.setProperty('--fs', s + 'px');
-      if (card.offsetHeight <= avail) { best = s; break; }   /* offsetHeight ignores the page transform */
-    }
-    card.style.setProperty('--fs', best + 'px');
-    return best;
+  var FA_RATIO = 1.143;            /* the site sets 20px Persian beside 17.5px Latin */
+  /* Above these sizes a 408px column drops under ~50 Latin (or ~43 Persian)
+     characters a line; justified lines then need visibly stretched word
+     spaces. Measured on this deck, 17.5/20 is still comfortable, 21 is not. */
+  var MAX_EN = 17.5, MAX_FA = 20;
+
+  /* a normal word space for this card, measured in the live font */
+  function spaceWidth(card) {
+    var probe = document.createElement('span');
+    probe.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden;white-space:pre;';
+    probe.textContent = 'nn';
+    card.appendChild(probe);
+    var a = probe.getBoundingClientRect().width;
+    probe.textContent = 'n n';
+    var b = probe.getBoundingClientRect().width;
+    probe.remove();
+    return Math.max(0.5, b - a);
   }
+
+  /* how hard is the text stretched? median and 90th-percentile gap / space */
+  function stretch(card) {
+    var rects = [], walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT), n;
+    while ((n = walker.nextNode())) {
+      var t = n.textContent, re = /\S+/g, m;
+      while ((m = re.exec(t))) {
+        var r = document.createRange();
+        r.setStart(n, m.index); r.setEnd(n, m.index + m[0].length);
+        var b = r.getBoundingClientRect();
+        if (b.width > 0) {
+          rects.push({ l: b.left, r: b.right, mid: (b.top + b.bottom) / 2,
+                       para: n.parentElement.closest('p, .head, div') || card });
+        }
+      }
+    }
+    rects.sort(function (a, b) { return a.mid - b.mid; });
+    var lines = [], cur = null;
+    rects.forEach(function (it) {
+      if (!cur || Math.abs(it.mid - cur.mid) > 3) { cur = { mid: it.mid, ws: [] }; lines.push(cur); }
+      cur.ws.push(it);
+    });
+    /* the last line of every paragraph ends short of the measure: not justified */
+    lines.forEach(function (line, i) {
+      var next = lines[i + 1];
+      line.endOfPara = !next || next.ws[0].para !== line.ws[0].para;
+    });
+    var sw = spaceWidth(card), arr = [];
+    lines.forEach(function (line) {
+      if (line.endOfPara) return;
+      var ws = line.ws.sort(function (a, b) { return a.l - b.l; });
+      if (ws.length < 3) return;
+      for (var k = 1; k < ws.length; k++) {
+        var g = ws[k].l - ws[k - 1].r;
+        if (g > 0) arr.push(g / sw);
+      }
+    });
+    if (!arr.length) return { med: 1, p90: 1 };
+    arr.sort(function (a, b) { return a - b; });
+    return { med: arr[(arr.length / 2) | 0], p90: arr[Math.floor(arr.length * 0.9)] };
+  }
+
+  function padding(card) {
+    var cs = getComputedStyle(card);
+    return { t: parseFloat(cs.paddingTop), b: parseFloat(cs.paddingBottom) };
+  }
+
+  /* the deck's house size, shrunk only as far as the longest slide needs */
+  function pickSizes(en, fa, avail) {
+    for (var e = MAX_EN; e >= 10.5; e -= 0.25) {
+      var f = Math.min(e * FA_RATIO, MAX_FA);
+      en.style.setProperty('--fs', e + 'px');
+      fa.style.setProperty('--fs', f + 'px');
+      if (en.offsetHeight <= avail && fa.offsetHeight <= avail)
+        return { e: e, f: f, qe: stretch(en), qf: stretch(fa) };
+    }
+    en.style.setProperty('--fs', '10.5px');
+    fa.style.setProperty('--fs', '12px');
+    return { e: 10.5, f: 12, qe: stretch(en), qf: stretch(fa) };
+  }
+
+  /* spend the leftover height on leading, not on word spaces */
+  function spread(card, avail, base) {
+    var p = padding(card), usable = avail - p.t - p.b;
+    card.style.lineHeight = base;
+    var inner = card.offsetHeight - p.t - p.b;
+    var f = Math.min(Math.max(usable / inner, 1), 1.45);
+    for (var k = 0; k < 60; k++) {
+      card.style.lineHeight = (base * f).toFixed(3);
+      if (card.offsetHeight <= avail) break;
+      f -= 0.01;
+    }
+    return +(base * f).toFixed(2);
+  }
+
   Array.prototype.forEach.call(document.querySelectorAll('.pg[data-p]'), function (pg) {
     var cols = pg.querySelector('.cols');
     if (!cols) return;
-    var cards = Array.prototype.slice.call(pg.querySelectorAll('.card'));
+    var en = pg.querySelector('.card.en'), fa = pg.querySelector('.card.fa');
+    if (!en || !fa) return;
     var avail = cols.clientHeight;
-    /* A short slide that is stretched to giant type gets rivers of white
-       space between justified words, so sparse pages are set ragged. */
-    var sparse = cards.some(function (c) { return c.offsetHeight < avail * 0.9; });
-    if (sparse) pg.classList.add('ragged');
-    cards.forEach(function (card) { card.style.minHeight = '0px'; });
-    cards.forEach(function (card) {
-      var size = fitCard(card, avail);
-      out.push({ p: +pg.getAttribute('data-p'), lang: card.getAttribute('data-fit'),
-                 size: +size.toFixed(2),
-                 cardH: Math.round(card.offsetHeight),
-                 avail: Math.round(avail), ragged: sparse });
-    });
-    cards.forEach(function (card) { card.style.minHeight = avail + 'px'; });
+    en.style.minHeight = fa.style.minHeight = '0px';
+    var pick = pickSizes(en, fa, avail);
+    var leadEn = spread(en, avail, 1.2), leadFa = spread(fa, avail, 1.58);
+    en.style.minHeight = fa.style.minHeight = avail + 'px';
+    out.push({ p: +pg.getAttribute('data-p'),
+               en: { size: pick.e, lead: leadEn, med: +pick.qe.med.toFixed(2), p90: +pick.qe.p90.toFixed(2),
+                     h: Math.round(en.offsetHeight) },
+               fa: { size: pick.f, lead: leadFa, med: +pick.qf.med.toFixed(2), p90: +pick.qf.p90.toFixed(2),
+                     h: Math.round(fa.offsetHeight) },
+               avail: Math.round(avail) });
   });
   return out;
 };
