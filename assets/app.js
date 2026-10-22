@@ -416,65 +416,75 @@
     refreshRail();
   }
 
-  /* ---------------------------------------------------------------- ZPD steps */
+  /* ---------------------------------------------------------------- 10 · ZPD (slide 23)
+     The only pinned scene. ScrollTrigger owns the pin: the hand-rolled
+     sticky + "elapsed pixels" maths drifted on resize, could not clean
+     itself up, and jumped whenever the mobile browser chrome appeared.
+     Rules taken from the gsap-scrolltrigger skill:
+       · pin an element, animate its children — never the pinned node;
+       · one trigger, one scrubbed timeline (no scrollTrigger on child
+         tweens, and never scrub + toggleActions together);
+       · invalidateOnRefresh, plus one refresh once webfonts land, because
+         the stage height depends on B Nazanin;
+       · gsap.matchMedia() decides pin / no-pin (short screens, reduced
+         motion) instead of hand-measured pixel guesses.
+     Without GSAP — or when the pin is skipped — no start state is ever
+     applied, so the finished diagram simply shows. */
   var zpdWrap = document.querySelector(".zpd-wrap");
-  var zpdParts = null;
-  if (zpdWrap) {
-    var stage = zpdWrap.querySelector(".zpd-stage");
-    zpdParts = {
-      frame: stage.querySelectorAll(".z-frame"),
-      card: stage.querySelectorAll(".z-card"),
-      title: stage.querySelectorAll(".z-title"),
-      desc: stage.querySelectorAll(".z-desc"),
-      known: stage.querySelectorAll(".z-known"),
-      unknown: stage.querySelectorAll(".z-unknown"),
-      base: stage.querySelectorAll(".z-base"),
-      arrow: stage.querySelectorAll(".z-arrowg"),
-      dots: stage.querySelectorAll(".zpd-dots span")
-    };
-  }
-  var zpdLast = -1;
-  function zpdApply(p) {
-    if (!zpdParts) return;
-    p = clamp01(p);
-    zpdParts.frame.forEach(function (el) { el.style.opacity = seg(p, 0, 0.08); });
-    zpdParts.card.forEach(function (el) {
-      var t = seg(p, 0.08, 0.3);
-      el.style.opacity = t;
-      el.style.transform = "scale(" + (0.55 + 0.45 * t).toFixed(4) + ")";
+  if (zpdWrap && window.gsap && window.ScrollTrigger) {
+    gsap.registerPlugin(ScrollTrigger);
+    var zpdStage = zpdWrap.querySelector(".zpd-stage");
+    var zpdSteps = zpdWrap.querySelectorAll(".zpd-steps span");
+    function zpdStepPaint(p) {
+      var n = p < 0.2 ? 1 : p < 0.45 ? 2 : p < 0.68 ? 3 : 4;
+      for (var i = 0; i < zpdSteps.length; i++) zpdSteps[i].classList.toggle("on", i < n);
+    }
+    var zpdMM = gsap.matchMedia();
+    zpdMM.add({
+      pin: "(prefers-reduced-motion: no-preference) and ((min-width: 821px) and (min-height: 640px)), " +
+           "(prefers-reduced-motion: no-preference) and ((max-width: 820px) and (min-height: 700px))",
+      flat: "(prefers-reduced-motion: reduce), (min-width: 821px) and (max-height: 639px), " +
+            "(max-width: 820px) and (max-height: 699px)"
+    }, function (ctx) {
+      var q = gsap.utils.selector(zpdWrap);
+      if (!ctx.conditions.pin) {
+        gsap.set(q(".zpd-fig, .zpd-card, .zpd-title, .zpd-desc, .zpd-known, .zpd-unknown, .zpd-rule, .zpd-arrow, .zpd-cap"), { clearProps: "all" });
+        zpdWrap.classList.add("zpd-static");
+        zpdStepPaint(1);
+        return;
+      }
+      zpdWrap.classList.remove("zpd-static");
+      var tl = gsap.timeline({
+        defaults: { ease: "none" },
+        scrollTrigger: {
+          id: "zpdPin",
+          trigger: zpdStage,
+          start: "top top",
+          end: function () { return "+=" + Math.round(window.innerHeight * 1.3); },
+          pin: true,
+          anticipatePin: 1,
+          scrub: 0.4,
+          invalidateOnRefresh: true,
+          onUpdate: function (self) { zpdStepPaint(self.progress); }
+        }
+      });
+      /* the build finishes at ~0.72 of the pin; the tail is a hold so the
+         finished diagram is actually readable before the pin releases */
+      tl.from(q(".zpd-fig"), { opacity: 0, duration: 0.04 }, 0)
+        .from(q(".zpd-card"), { opacity: 0, scale: 0.92, duration: 0.12 }, 0.02)
+        .from(q(".zpd-title"), { opacity: 0, y: 10, duration: 0.10 }, 0.10)
+        .from(q(".zpd-desc"), { opacity: 0, y: 8, duration: 0.10 }, 0.18)
+        .from(q(".zpd-known, .zpd-unknown"), { opacity: 0, duration: 0.09 }, 0.28)
+        .from(q(".zpd-rule"), { scaleX: 0, duration: 0.10 }, 0.38)
+        .from(q(".zpd-arrow"), { opacity: 0, y: 12, duration: 0.12 }, 0.50)
+        .from(q(".zpd-cap"), { opacity: 0, duration: 0.10 }, 0.62)
+        .to({}, { duration: 0.28 }, 0.72);
+      zpdStepPaint(0);
     });
-    zpdParts.title.forEach(function (el) {
-      var t = seg(p, 0.28, 0.42);
-      el.style.opacity = t;
-      el.style.transform = "translateY(" + (10 * (1 - t)).toFixed(2) + "px)";
-    });
-    zpdParts.desc.forEach(function (el) { el.style.opacity = seg(p, 0.4, 0.55); });
-    zpdParts.known.forEach(function (el) { el.style.opacity = seg(p, 0.52, 0.64); });
-    zpdParts.unknown.forEach(function (el) { el.style.opacity = seg(p, 0.56, 0.68); });
-    zpdParts.base.forEach(function (el) { el.style.transform = "scaleX(" + seg(p, 0.62, 0.76).toFixed(4) + ")"; });
-    zpdParts.arrow.forEach(function (el) { el.style.opacity = seg(p, 0.74, 0.9); });
-    var lit = p < 0.3 ? 1 : p < 0.55 ? 2 : p < 0.76 ? 3 : 4;
-    zpdParts.dots.forEach(function (d, i) { d.classList.toggle("on", i < lit); });
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () { ScrollTrigger.refresh(); });
+    }
   }
-  /* If the pinned stage cannot fit the viewport (short phones, reduced
-     motion) the pin is switched off and the diagram is shown complete:
-     a pinned scene whose content is taller than the screen would hide
-     its own last steps. */
-  function zpdFits() {
-    if (!zpdWrap || !zpdWrap.querySelector(".zpd-stage")) return true;
-    var stageEl = zpdWrap.querySelector(".zpd-stage");
-    var grid = stageEl.querySelector(".zpd-grid");
-    var dots = stageEl.querySelector(".zpd-dots");
-    var need = (grid ? grid.offsetHeight : 0) + (dots ? dots.offsetHeight + 26 : 0) + 106;
-    return need <= window.innerHeight + 4;
-  }
-  function syncZpdMode() {
-    if (!zpdWrap) return;
-    var pinned = !reduced() && zpdFits();
-    zpdWrap.classList.toggle("zpd-static", !pinned);
-    if (!pinned) zpdApply(1);
-  }
-
   /* ---------------------------------------------------------------- illustrations */
   var illus = [];
   document.querySelectorAll(".illus").forEach(function (fig) {
@@ -543,23 +553,6 @@
     paintFill(y);
     if (toTop) toTop.classList.toggle("show", y > 700);
 
-    if (zpdParts) {
-      if (zpdWrap.classList.contains("zpd-static") || reduced()) {
-        if (zpdLast !== 1 || force) { zpdApply(1); zpdLast = 1; }
-      } else {
-        var r = zpdWrap.getBoundingClientRect();
-        var total = r.height - window.innerHeight;
-        if (total <= 0) {
-          if (zpdLast !== 1) { zpdApply(1); zpdLast = 1; }
-        } else {
-          /* finish the build a little before the pin releases, so the
-             completed diagram is actually readable while still pinned */
-          var zp = clamp01((-r.top / total) / 0.9);
-          if (Math.abs(zp - zpdLast) > 0.001) { zpdApply(zp); zpdLast = zp; }
-        }
-      }
-    }
-
     if (illustrationsReady) buildIllustrations(false);
     fxDirty = true;
   }
@@ -573,7 +566,7 @@
     scrollFallback = setTimeout(function () { if (ticking) onScroll(false); }, 140);
   }
   window.addEventListener("scroll", requestScroll, { passive: true });
-  window.addEventListener("resize", function () { requestScroll(); syncZpdMode(); scheduleLayout(); });
+  window.addEventListener("resize", function () { requestScroll(); scheduleLayout(); });
   if (window.visualViewport) {
     window.visualViewport.addEventListener("resize", function () { requestScroll(); scheduleLayout(); });
   }
@@ -782,7 +775,6 @@
   /* ---------------------------------------------------------------- boot */
   illustrationsReady = true;
   layoutRail();
-  syncZpdMode();
   onScroll(true);
   updateActive();
   refreshRail();
@@ -791,10 +783,10 @@
   fxFrame();
 
   window.addEventListener("load", function () {
-    syncZpdMode(); layoutRail(); onScroll(true); buildIllustrations(true); sweepReveals(); chOrnaments();
+    layoutRail(); onScroll(true); buildIllustrations(true); sweepReveals(); chOrnaments();
   });
   if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(function () { syncZpdMode(); layoutRail(); onScroll(true); buildIllustrations(true); });
+    document.fonts.ready.then(function () { layoutRail(); onScroll(true); buildIllustrations(true); if (window.ScrollTrigger) ScrollTrigger.refresh(); });
   }
   if (window.ResizeObserver && document.body) {
     var ro = new ResizeObserver(function () { scheduleLayout(); });
@@ -820,6 +812,13 @@
     go: goTo,
     now: scrollNow,
     update: updateActive,
-    zpd: function () { return { static: zpdWrap ? zpdWrap.classList.contains("zpd-static") : null, p: zpdLast, fits: zpdFits() }; }
+    zpd: function () {
+      var st = window.ScrollTrigger ? ScrollTrigger.getById("zpdPin") : null;
+      return {
+        pinned: !!st,
+        static: zpdWrap ? zpdWrap.classList.contains("zpd-static") : null,
+        p: st ? +st.progress.toFixed(3) : null
+      };
+    }
   };
 })();
