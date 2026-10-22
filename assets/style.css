@@ -777,10 +777,20 @@ body.tab-hidden .blob { animation-play-state: paused; }
 }
 @media (max-width: 720px) {
   .ppl-switch { grid-template-columns: 1fr; gap: 4px; }
+  /* three tabs in one line: keep the label on one line and let it breathe,
+     so a two-line tab never collides with its neighbours or the divider */
   .ppl-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; }
-  .ppl-tab { padding: 9px 6px 11px; font-size: calc(14px * var(--fs)); text-align: center; }
+  .ppl-tab {
+    padding: 8px 4px 10px; font-size: calc(14px * var(--fs));
+    text-align: center; line-height: 1.4;
+    white-space: normal; overflow-wrap: anywhere;
+  }
   .ppl-idnum { display: none; }
   .ppl-head { text-align: start; }
+  .ppl-idnum { display: none; }
+}
+@media (max-width: 430px) {
+  .ppl-tab { font-size: calc(13px * var(--fs)); padding: 8px 3px 10px; }
 }
 @media (max-width: 480px) {
   .ppl-pane { padding: 16px 13px; }
