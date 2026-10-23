@@ -93,14 +93,87 @@
     syncFs();
   }
 
+  /* ---------------------------------------------------------------- smooth window glide
+     Replaces jarring instant jumps on distant rail clicks and #toTop with a
+     cancellable, retargetable quintic rAF glide (500ms–1040ms scaled smoothly
+     with log-distance). Re-reads live target element offset during approach so
+     GSAP ScrollTrigger pin spacers (#s23) land at 0.00px error, yields in 0ms
+     to wheel/touch gestures, and drops to instant scroll under reduced motion. */
+  var glideRAF = 0, glideTargetEl = null, glideTargetOffset = 0, glideDestY = 0, glideLastY = 0;
+
+  function cancelWindowGlide() {
+    if (glideRAF) {
+      cancelAnimationFrame(glideRAF);
+      glideRAF = 0;
+    }
+    glideTargetEl = null;
+  }
+
+  function easeVelvet(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  function glideWindowTo(targetTop, targetEl, topOffset) {
+    cancelWindowGlide();
+    if (reduced()) {
+      scrollNow(targetTop);
+      return;
+    }
+    var startY = window.scrollY || root.scrollTop || 0;
+    var dist = Math.abs(targetTop - startY);
+    if (dist < 2) {
+      scrollNow(targetTop);
+      return;
+    }
+    glideTargetEl = targetEl || null;
+    glideTargetOffset = typeof topOffset === "number" ? topOffset : 0;
+    glideDestY = targetTop;
+
+    var duration = Math.min(920, Math.max(480, Math.round(440 + 115 * Math.log(1 + dist / 900))));
+    var t0 = performance.now();
+    glideLastY = startY;
+
+    function step() {
+      var liveY = window.scrollY || root.scrollTop || 0;
+      if (Math.abs(liveY - glideLastY) > 4) {
+        cancelWindowGlide();
+        return;
+      }
+      var t = Math.min(1, Math.max(0, (performance.now() - t0) / duration));
+      if (glideTargetEl) {
+        glideDestY = Math.max(0, Math.min(maxScroll(), docTop(glideTargetEl) - glideTargetOffset));
+      }
+      var nextY = startY + (glideDestY - startY) * easeVelvet(t);
+      scrollNow(nextY);
+      glideLastY = window.scrollY || root.scrollTop || 0;
+      if (t < 1) {
+        glideRAF = requestAnimationFrame(step);
+      } else {
+        glideRAF = 0;
+        var finalY = glideTargetEl
+          ? Math.max(0, Math.min(maxScroll(), docTop(glideTargetEl) - glideTargetOffset))
+          : glideDestY;
+        glideTargetEl = null;
+        scrollNow(finalY);
+        glideLastY = window.scrollY || root.scrollTop || 0;
+        onScroll(true);
+      }
+    }
+    glideRAF = requestAnimationFrame(step);
+  }
+
+  window.addEventListener("wheel", cancelWindowGlide, { passive: true, capture: true });
+  window.addEventListener("touchstart", cancelWindowGlide, { passive: true, capture: true });
+  window.addEventListener("keydown", function (e) {
+    if (/^(ArrowUp|ArrowDown|PageUp|PageDown|Home|End| )$/.test(e.key)) cancelWindowGlide();
+  }, { passive: true, capture: true });
+
   /* ---------------------------------------------------------------- back to top */
   var toTop = document.getElementById("toTop");
   if (toTop) {
     toTop.addEventListener("click", function () {
-      /* same rule as the rail: a long hop is instant, a short one glides —
-         a 45 000px smooth scroll is a three-second blur, not a courtesy */
-      if (reduced() || (window.scrollY || 0) > window.innerHeight * 2.5) scrollNow(0);
-      else window.scrollTo({ top: 0, behavior: "smooth" });
+      glideWindowTo(0, null, 0);
+      if (history.replaceState) history.replaceState(null, "", "#hero");
     });
   }
 
@@ -378,16 +451,9 @@
   function goTo(targetId) {
     var el = document.getElementById(targetId);
     if (!el) return;
-    var top = Math.max(0, docTop(el) - (targetId === "hero" ? 0 : TOP_OFFSET));
-    /* A chapter jump can be 20 000px: a smooth scroll over that distance
-       crawls for seconds (and swallows the next click). Long hops are
-       instant, short ones glide. */
-    var far = Math.abs(top - (window.scrollY || 0)) > window.innerHeight * 2.5;
-    if (reduced() || far) scrollNow(top);
-    else {
-      try { window.scrollTo({ top: top, behavior: "smooth" }); }
-      catch (e) { scrollNow(top); }
-    }
+    var offset = targetId === "hero" ? 0 : TOP_OFFSET;
+    var top = Math.max(0, Math.min(maxScroll(), docTop(el) - offset));
+    glideWindowTo(top, el, offset);
     if (history.replaceState) history.replaceState(null, "", "#" + targetId);
   }
   if (rail) {
@@ -400,6 +466,20 @@
       goTo(href.slice(1));
     });
   }
+  /* Delegate other in-page #anchor links (e.g. hero CTA) to smooth glide too,
+     excluding modal triggers (#summary / #people) which handle their own doors */
+  document.addEventListener("click", function (ev) {
+    if (ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+    var a = ev.target && ev.target.closest ? ev.target.closest('a[href^="#"]') : null;
+    if (!a || (rail && rail.contains(a))) return;
+    if (a.hasAttribute("data-summary-open") || a.hasAttribute("data-ppl-open")) return;
+    var href = a.getAttribute("href") || "";
+    if (href.length < 2) return;
+    var id = href.slice(1);
+    if (!document.getElementById(id)) return;
+    ev.preventDefault();
+    goTo(id);
+  });
 
   var lastZoneKey = "";
   function updateActive() {
@@ -661,6 +741,25 @@
     });
   }
 
+  /* Progressive WAAPI scroll arrival for the two gateway cards (#summaryPortal,
+     #portal): keeps CSS opacity:1 untouched in static/print/instant states, and
+     plays a silky GPU rise when scrolled into view on mobile or desktop. */
+  if (window.IntersectionObserver) {
+    var portalCards = Array.prototype.slice.call(document.querySelectorAll(".portal-card"));
+    var portalIO = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        portalIO.unobserve(en.target);
+        if (reduced() || !en.target.animate) return;
+        en.target.animate([
+          { opacity: 0.2, transform: "translateY(22px) scale(0.99)" },
+          { opacity: 1, transform: "translateY(0) scale(1)" }
+        ], { duration: 560, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
+      });
+    }, { threshold: 0.08, rootMargin: "0px 0px -4% 0px" });
+    portalCards.forEach(function (card) { portalIO.observe(card); });
+  }
+
   /* ---------------------------------------------------------------- distance emphasis + scroll velocity */
   var fxFigs = illus.slice();
   var fxDirty = true, fxLastY = window.scrollY || 0, fxVel = 0, fxSVel = 0, fxIdle = 0, fxLast = "";
@@ -749,10 +848,13 @@
     });
     heroWords.forEach(function (w, i) {
       if (!w.animate) return;
-      w.animate([
-        { opacity: 0, transform: "translateY(0.5em) scale(0.94)", filter: "blur(7px)" },
-        { opacity: 1, transform: "translateY(0) scale(1)", filter: "blur(0px)" }
-      ], { duration: 780, delay: 150 + i * 55, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "backwards" });
+      var wa = w.animate([
+        { opacity: 0, transform: "translateY(0.32em)" },
+        { opacity: 1, transform: "translateY(0)" }
+      ], { duration: 480, delay: 60 + i * 18, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "backwards" });
+      if (document.timeline && typeof document.timeline.currentTime === "number") {
+        try { wa.startTime = document.timeline.currentTime; } catch (e) {}
+      }
     });
   }
 
@@ -930,10 +1032,146 @@
       sec.style.setProperty("--ppl-r", reach + "px");
     }
 
+    var activeContentAnims = [];
+    var boxHeightAnims = new WeakMap();
+
+    function cancelContentAnims() {
+      while (activeContentAnims.length) {
+        var a = activeContentAnims.pop();
+        try { a.cancel(); } catch (e) {}
+      }
+    }
+
+    function cancelBoxHeight(box) {
+      if (!box) return;
+      var prev = boxHeightAnims.get(box);
+      if (prev) {
+        boxHeightAnims.delete(box);
+        try { prev.cancel(); } catch (e) {}
+      }
+      box.style.height = "";
+    }
+
+    function runAnim(el, keyframes, opts) {
+      if (!el || !el.animate || reduced()) return null;
+      var a = el.animate(keyframes, opts);
+      if (document.timeline && typeof document.timeline.currentTime === "number") {
+        try { a.startTime = document.timeline.currentTime; } catch (e) {}
+      }
+      activeContentAnims.push(a);
+      var cleanup = function () {
+        var idx = activeContentAnims.indexOf(a);
+        if (idx >= 0) activeContentAnims.splice(idx, 1);
+      };
+      a.onfinish = cleanup;
+      a.oncancel = cleanup;
+      return a;
+    }
+
+    var EASE_OUT = "cubic-bezier(0.22, 1, 0.36, 1)";
+
+    function choreographPanel(panel, dir, baseDelay) {
+      if (!panel || reduced()) return;
+      var dx = (dir || 1) * -12;
+      var delay0 = baseDelay || 0;
+      var proseItems = Array.prototype.slice.call(panel.querySelectorAll(".ppl-text > *"));
+      proseItems.forEach(function (node, idx) {
+        runAnim(node, [
+          { opacity: 0.12, transform: "translate3d(" + dx + "px, 9px, 0)" },
+          { opacity: 1, transform: "translate3d(0, 0, 0)" }
+        ], { duration: 340, delay: delay0 + Math.min(idx, 3) * 26, easing: EASE_OUT, fill: "backwards" });
+      });
+      var facts = panel.querySelector(".ppl-facts");
+      if (facts) {
+        runAnim(facts, [
+          { opacity: 0.15, transform: "translate3d(" + (dx * 0.6).toFixed(1) + "px, 9px, 0)" },
+          { opacity: 1, transform: "translate3d(0, 0, 0)" }
+        ], { duration: 350, delay: delay0 + 25, easing: EASE_OUT, fill: "backwards" });
+        Array.prototype.forEach.call(facts.querySelectorAll("li"), function (li, idx) {
+          runAnim(li, [
+            { opacity: 0.15, transform: "translateY(6px)" },
+            { opacity: 1, transform: "translateY(0)" }
+          ], { duration: 300, delay: delay0 + 45 + Math.min(idx, 4) * 22, easing: EASE_OUT, fill: "backwards" });
+        });
+      }
+    }
+
+    function choreographPane(pane, dir, baseDelay) {
+      if (!pane || reduced()) return;
+      var dx = (dir || 1) * -15;
+      var delay0 = baseDelay || 0;
+      var idRow = pane.querySelector(".ppl-id");
+      var tabsRow = pane.querySelector(".ppl-tabs");
+      var srcRow = pane.querySelector(".ppl-src");
+      var mono = persons[cur] && persons[cur].querySelector(".ppl-mono");
+      if (mono) {
+        runAnim(mono, [
+          { transform: "scale(0.84)" },
+          { transform: "scale(1.08)", offset: 0.55 },
+          { transform: "scale(1)" }
+        ], { duration: 380, delay: delay0, easing: EASE_OUT });
+      }
+      if (idRow) {
+        runAnim(idRow, [
+          { opacity: 0.15, transform: "translate3d(" + dx + "px, 7px, 0)" },
+          { opacity: 1, transform: "translate3d(0, 0, 0)" }
+        ], { duration: 350, delay: delay0, easing: EASE_OUT, fill: "backwards" });
+      }
+      if (tabsRow) {
+        runAnim(tabsRow, [
+          { opacity: 0.4, transform: "translateY(5px)" },
+          { opacity: 1, transform: "translateY(0)" }
+        ], { duration: 310, delay: delay0 + 20, easing: EASE_OUT, fill: "backwards" });
+      }
+      choreographPanel(activePanel(pane), dir, delay0 + 25);
+      if (srcRow) {
+        runAnim(srcRow, [
+          { opacity: 0.2, transform: "translateY(5px)" },
+          { opacity: 1, transform: "translateY(0)" }
+        ], { duration: 310, delay: delay0 + 50, easing: EASE_OUT, fill: "backwards" });
+      }
+    }
+
+    function choreographOpen() {
+      if (reduced()) return;
+      cancelContentAnims();
+      var barEl = sec.querySelector(".ppl-bar");
+      var headKids = sec.querySelectorAll(".ppl-head > *");
+      var switchEl = sec.querySelector(".ppl-switch");
+      var footEl = sec.querySelector(".ppl-foot");
+      if (barEl) {
+        runAnim(barEl, [
+          { opacity: 0, transform: "translateY(-10px)" },
+          { opacity: 1, transform: "translateY(0)" }
+        ], { duration: 400, delay: 40, easing: EASE_OUT, fill: "backwards" });
+      }
+      Array.prototype.forEach.call(headKids, function (el, idx) {
+        runAnim(el, [
+          { opacity: 0, transform: "translateY(14px)" },
+          { opacity: 1, transform: "translateY(0)" }
+        ], { duration: 480, delay: 90 + idx * 50, easing: EASE_OUT, fill: "backwards" });
+      });
+      if (switchEl) {
+        runAnim(switchEl, [
+          { opacity: 0, transform: "translateY(14px)" },
+          { opacity: 1, transform: "translateY(0)" }
+        ], { duration: 480, delay: 175, easing: EASE_OUT, fill: "backwards" });
+      }
+      runAnim(stage, [
+        { opacity: 0, transform: "translateY(16px)" },
+        { opacity: 1, transform: "translateY(0)" }
+      ], { duration: 500, delay: 225, easing: EASE_OUT, fill: "backwards" });
+      choreographPane(panes[cur], 1, 240);
+      if (footEl) {
+        runAnim(footEl, [
+          { opacity: 0, transform: "translateY(12px)" },
+          { opacity: 1, transform: "translateY(0)" }
+        ], { duration: 420, delay: 300, easing: EASE_OUT, fill: "backwards" });
+      }
+    }
+
     function settlePeople() {
       clearTimeout(settleTimer);
-      clearTimeout(enterTimer);
-      sec.classList.remove("is-entering");
       if (!isOpen) return;
       sec.classList.add("is-settled");
       root.classList.add("modal-settled");
@@ -965,7 +1203,11 @@
       sec.classList.add("is-entering");
       void sec.offsetHeight;
       sec.classList.add("is-open");
+      choreographOpen();
       settleTimer = setTimeout(settlePeople, reduced() ? 0 : 700);
+      enterTimer = setTimeout(function () {
+        sec.classList.remove("is-entering");
+      }, reduced() ? 0 : 820);
 
       setTimeout(function () {
         if (!isOpen) return;
@@ -986,6 +1228,9 @@
       isOpen = false;
       clearTimeout(settleTimer);
       clearTimeout(enterTimer);
+      cancelContentAnims();
+      cancelBoxHeight(stage);
+      panes.forEach(function (p) { cancelBoxHeight(bodyOf(p)); });
       root.classList.remove("modal-settled");
       computeOrigin(false);
       sec.classList.remove("is-settled", "is-entering");
@@ -1021,16 +1266,18 @@
       lastFocus = null;
     }
 
-    /* If the user immediately flings/scrolls before the .68s circle reveal finishes,
-       settle instantly on the very first gesture/scroll event so clip-path drops
-       and the underlying deck is hidden before a single scrolled frame paints. */
+    /* If the user immediately flings/scrolls downward before the .68s circle
+       reveal finishes, settle instantly on the very first wheel/touch gesture
+       or downward scroll (scrollTop > 2, ignoring open()'s own reset to 0). */
     function onEarlyScroll() {
       if (isOpen && !sec.classList.contains("is-settled")) settlePeople();
     }
     if (sheet) {
       sheet.addEventListener("touchmove", onEarlyScroll, { passive: true });
       sheet.addEventListener("wheel", onEarlyScroll, { passive: true });
-      sheet.addEventListener("scroll", onEarlyScroll, { passive: true });
+      sheet.addEventListener("scroll", function () {
+        if (sheet.scrollTop > 2) onEarlyScroll();
+      }, { passive: true });
     }
     sec.addEventListener("cancel", function (e) {
       e.preventDefault();
@@ -1059,9 +1306,16 @@
         scrollNow(y);
         return;
       }
+      if (location.hash === "#people") {
+        if (!isOpen) open({ silent: true });
+        return;
+      }
       if (!isOpen) return;
       if (Date.now() - openedAt < 450) return;   /* the close's own history.back() */
       close(true);
+    });
+    window.addEventListener("hashchange", function () {
+      if (location.hash === "#people" && !isOpen) open({ silent: true });
     });
     document.addEventListener("keydown", function (e) {
       if (!isOpen) return;
@@ -1114,36 +1368,50 @@
                             (t.offsetTop + t.offsetHeight - 3) + "px)";
     }
 
-    var heightTimers = new WeakMap();
-    function tweenHeight(el, applyChange, ms) {
-      if (!el || reduced()) { applyChange(); if (el) el.style.height = ""; return; }
-      clearTimeout(heightTimers.get(el));
-      var fromH = el.offsetHeight;
-      el.style.height = "";
+    function animateBoxHeight(el, applyChange, ms) {
+      if (!el || reduced() || !el.animate) {
+        cancelBoxHeight(el);
+        applyChange();
+        if (el) el.style.height = "";
+        return;
+      }
+      var fromH = el.getBoundingClientRect().height;
+      cancelBoxHeight(el);
       applyChange();
-      var toH = el.offsetHeight;
-      if (!fromH || Math.abs(toH - fromH) < 2) { el.style.height = ""; return; }
-      sec.classList.add(NOFX);
-      el.style.height = fromH + "px";
-      void el.offsetHeight;
-      sec.classList.remove(NOFX);
-      el.style.height = toH + "px";
-      heightTimers.set(el, setTimeout(function () {
+      var toH = el.getBoundingClientRect().height;
+      if (!fromH || !toH || Math.abs(toH - fromH) < 2) {
         el.style.height = "";
-      }, ms || 520));
+        return;
+      }
+      var anim = el.animate([
+        { height: fromH.toFixed(1) + "px" },
+        { height: toH.toFixed(1) + "px" }
+      ], { duration: ms || 390, easing: EASE_OUT });
+      if (document.timeline && typeof document.timeline.currentTime === "number") {
+        try { anim.startTime = document.timeline.currentTime; } catch (e) {}
+      }
+      boxHeightAnims.set(el, anim);
+      var release = function () {
+        if (boxHeightAnims.get(el) === anim) boxHeightAnims.delete(el);
+        el.style.height = "";
+      };
+      anim.onfinish = release;
+      anim.oncancel = release;
     }
 
     function syncInkImmediate() {
-      sec.classList.add(NOFX);
-      stage.style.height = "";
+      cancelBoxHeight(stage);
       panes.forEach(function (pane) {
-        var b = bodyOf(pane);
-        if (b) b.style.height = "";
+        cancelBoxHeight(bodyOf(pane));
       });
+      var tabInks = Array.prototype.slice.call(sec.querySelectorAll(".ppl-tabink"));
+      ink.style.transition = "none";
+      tabInks.forEach(function (ti) { ti.style.transition = "none"; });
       moveInk();
       panes.forEach(moveTabInk);
-      void stage.offsetHeight;
-      requestAnimationFrame(function () { sec.classList.remove(NOFX); });
+      void ink.offsetHeight;
+      ink.style.transition = "";
+      tabInks.forEach(function (ti) { ti.style.transition = ""; });
     }
 
     function touch() { lastTouch = Date.now(); }
@@ -1166,34 +1434,40 @@
     });
 
     function showPane(i) {
+      var prev = cur;
+      var dir = i >= prev ? 1 : -1;
       cur = i;
       touch();
       sec.classList.remove("is-entering");
-      tweenHeight(stage, function () {
+      cancelContentAnims();
+      panes.forEach(function (p) { cancelBoxHeight(bodyOf(p)); });
+      animateBoxHeight(stage, function () {
         persons.forEach(function (b, k) {
           b.setAttribute("aria-selected", k === i ? "true" : "false");
           b.tabIndex = k === i ? 0 : -1;
         });
         panes.forEach(function (p, k) {
-          var b = bodyOf(p);
-          if (b) b.style.height = "";
           p.classList.toggle("is-on", k === i);
           setHidden(p, k !== i);
         });
-      }, 520);
+      }, 390);
       moveInk();
       panes.forEach(moveTabInk);
+      choreographPane(panes[i], dir, 0);
     }
 
     function selectTab(pane, k) {
       var tabs = Array.prototype.slice.call(pane.querySelectorAll(".ppl-tab"));
       var panels = panelsOf(pane);
       if (!tabs.length || k < 0 || k >= tabs.length) return;
+      var paneIdx = panes.indexOf(pane);
+      var prevTab = lastTab[paneIdx] || 0;
+      var dir = k >= prevTab ? 1 : -1;
       touch();
       sec.classList.remove("is-entering");
       var body = bodyOf(pane);
       var applyTabs = function () {
-        lastTab[panes.indexOf(pane)] = k;
+        lastTab[paneIdx] = k;
         tabs.forEach(function (b, j) {
           b.setAttribute("aria-selected", j === k ? "true" : "false");
           b.tabIndex = j === k ? 0 : -1;
@@ -1204,8 +1478,22 @@
         });
       };
       if (pane === panes[cur] && body) {
-        stage.style.height = "";
-        tweenHeight(body, applyTabs, 480);
+        cancelContentAnims();
+        cancelBoxHeight(stage);
+        animateBoxHeight(body, applyTabs, 380);
+        choreographPanel(panels[k], dir, 0);
+        /* If reader scrolled deep inside a tall tab and clicked a shorter tab
+           whose tab bar is now above the sticky header, gently frame the tab bar */
+        if (sheet && !reduced()) {
+          var barEl = sec.querySelector(".ppl-bar");
+          var tabsRow = pane.querySelector(".ppl-tabs");
+          if (barEl && tabsRow) {
+            var topDiff = tabsRow.getBoundingClientRect().top - barEl.getBoundingClientRect().bottom;
+            if (topDiff < -12) {
+              sheet.scrollTo({ top: Math.max(0, sheet.scrollTop + topDiff - 12), behavior: "smooth" });
+            }
+          }
+        }
       } else {
         applyTabs();
       }
@@ -1310,6 +1598,7 @@
           paneH: Math.round(pane.offsetHeight),
           bodyH: Math.round(body.offsetHeight),
           panelH: panel ? Math.round(panel.offsetHeight) : null,
+          activeAnims: activeContentAnims.length,
           clipped: pane.offsetHeight > stage.offsetHeight + 1
         };
       }
@@ -1322,6 +1611,7 @@
     layout: function () { layoutRail(); onScroll(true); },
     go: goTo,
     now: scrollNow,
+    gliding: function () { return !!glideRAF; },
     update: updateActive,
     zpd: function () {
       var st = window.ScrollTrigger ? ScrollTrigger.getById("zpdPin") : null;

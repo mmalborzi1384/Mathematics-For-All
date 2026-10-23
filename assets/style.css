@@ -160,41 +160,46 @@ a { color: inherit; }
   transform-origin: right center;
 }
 
-/* ---------------------------------------------------------------- 04 ambient background */
-.ambient { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
-.ambient i { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.55; }
+/* ---------------------------------------------------------------- 04 ambient background
+   Pure soft multi-stop radial gradients (zero expensive filter:blur(70px) kernel)
+   + static contained dot lattice: identical diffused editorial paper glow with
+   zero continuous backdrop-filter invalidation and locked 60/120fps scrolling. */
+.ambient {
+  position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
+  contain: strict;
+}
+.ambient i { position: absolute; border-radius: 50%; opacity: 0.62; will-change: transform; }
 .ambient i:nth-child(1) {
-  width: 54vmax; height: 54vmax; top: -20vmax; inset-inline-start: -16vmax;
-  background: radial-gradient(circle, color-mix(in srgb, var(--sage-soft) 32%, transparent), transparent 65%);
-  animation: drift1 48s ease-in-out infinite alternate;
+  width: 62vmax; height: 62vmax; top: -22vmax; inset-inline-start: -18vmax;
+  background: radial-gradient(circle, color-mix(in srgb, var(--sage-soft) 28%, transparent) 0%, color-mix(in srgb, var(--sage-soft) 13%, transparent) 38%, transparent 70%);
 }
 .ambient i:nth-child(2) {
-  width: 46vmax; height: 46vmax; bottom: -18vmax; inset-inline-end: -12vmax;
-  background: radial-gradient(circle, color-mix(in srgb, var(--beige) 42%, transparent), transparent 65%);
-  animation: drift2 56s ease-in-out infinite alternate;
+  width: 54vmax; height: 54vmax; bottom: -20vmax; inset-inline-end: -14vmax;
+  background: radial-gradient(circle, color-mix(in srgb, var(--beige) 38%, transparent) 0%, color-mix(in srgb, var(--beige) 16%, transparent) 40%, transparent 72%);
 }
 .ambient i:nth-child(3) {
-  width: 30vmax; height: 30vmax; top: 42%; inset-inline-start: 58%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--sage) 20%, transparent), transparent 65%);
-  animation: drift1 64s ease-in-out infinite alternate-reverse;
+  width: 36vmax; height: 36vmax; top: 40%; inset-inline-start: 56%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--sage) 17%, transparent) 0%, color-mix(in srgb, var(--sage) 7%, transparent) 40%, transparent 70%);
 }
-:root[data-theme="dark"] .ambient i { opacity: 0.32; }
-@keyframes drift1 { from { transform: translate(0, 0) scale(1); } to { transform: translate(5vmax, 4vmax) scale(1.12); } }
-@keyframes drift2 { from { transform: translate(0, 0) scale(1.08); } to { transform: translate(-4vmax, -5vmax) scale(0.96); } }
+:root[data-theme="dark"] .ambient i { opacity: 0.34; }
 
 .lattice {
-  position: fixed; inset: -30px; z-index: 0; pointer-events: none; opacity: 0.55;
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.55;
   background-image: radial-gradient(color-mix(in srgb, var(--sage) 14%, transparent) 1.1px, transparent 1.35px);
   background-size: 30px 30px;
-  animation: latticeDrift 24s linear infinite;
-  will-change: transform;
+  contain: strict;
 }
 :root[data-theme="dark"] .lattice { opacity: 0.34; }
-@keyframes latticeDrift {
-  from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(30px, 30px, 0); }
+/* Pause all decorative main-deck animations while a full-screen reading modal
+   owns the screen so 100% of GPU/CPU budget serves smooth modal motion & scroll */
+html.summary-lock main *,
+html.summary-lock main *::before,
+html.summary-lock main *::after,
+html.ppl-lock main *,
+html.ppl-lock main *::before,
+html.ppl-lock main *::after {
+  animation-play-state: paused !important;
 }
-body.tab-hidden .lattice,
 body.tab-hidden .ambient i,
 body.tab-hidden .blob { animation-play-state: paused; }
 
@@ -321,6 +326,11 @@ body.tab-hidden .blob { animation-play-state: paused; }
   transform: translate(-50%, -50%);
   border-radius: 50%; border: 2px solid var(--sage); background: var(--bg);
   transition: background-color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease, transform 0.4s ease;
+}
+#rail a:hover .dot {
+  border-color: var(--sage-strong);
+  transform: translate(-50%, -50%) scale(1.18);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--sage) 16%, transparent);
 }
 #rail a.on .dot {
   background: var(--sage); transform: translate(-50%, -50%) scale(1.25);
@@ -812,23 +822,11 @@ html.modal-settled #progress {
 }
 .ppl-back-b { padding: 10px 20px; }
 
-/* the parts arrive just behind the circle, so the wipe never lands on a
-   page that is already finished. The stagger lives on .is-entering only —
-   a delay left on .ppl-stage would postpone every later height change
-   (each person switch) by a third of a second. */
-.ppl-sheet .wrap > * {
-  opacity: 0; transform: translateY(18px);
-  transition: opacity .46s ease, transform .58s cubic-bezier(.22, 1, .36, 1);
-}
-#people.is-open .ppl-sheet .wrap > * { opacity: 1; transform: none; }
-#people.is-entering .ppl-bar { animation: sumFadeDown .44s .06s both cubic-bezier(.22, 1, .36, 1); }
-#people.is-entering .ppl-sheet .wrap > .ppl-head { transition-delay: .16s; }
-#people.is-entering .ppl-sheet .wrap > .ppl-switch { transition-delay: .23s; }
-#people.is-entering .ppl-sheet .wrap > .ppl-stage { transition-delay: .30s; }
-#people.is-entering .ppl-sheet .wrap > .ppl-foot { transition-delay: .36s; }
-#people.is-entering .ppl-person[aria-selected="true"] .ppl-mono {
-  animation: pplPop .6s cubic-bezier(.22, 1, .36, 1) .34s both;
-}
+/* Entrance, person-switch, and tab-switch animations inside #people are driven
+   by single-source GPU WAAPI choreography in app.js so elements stay opaque
+   at rest (including during the closing circle wipe, print, and reduced motion)
+   with zero conflicting CSS height/opacity transitions. */
+.ppl-sheet .wrap > * { opacity: 1; transform: none; }
 
 /* the deck behind the view must not scroll while the view is up */
 html.ppl-lock { overflow: hidden; }
@@ -890,7 +888,7 @@ html.ppl-lock { overflow: hidden; }
 .ppl-pinfo { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .ppl-pname { font-size: calc(18.5px * var(--fs)); font-weight: 700; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ppl-platin {
-  font-family: "Times New Roman", Times, serif; direction: ltr; text-align: left;
+  font-family: "Times New Roman", Times, serif; direction: ltr; unicode-bidi: isolate; text-align: right;
   font-size: calc(12.5px * var(--fs)); color: var(--ink-soft); letter-spacing: .2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
@@ -902,28 +900,19 @@ html.ppl-lock { overflow: hidden; }
   box-shadow: var(--shadow);
   transition: background-color .5s ease, border-color .5s ease;
 }
-/* measuring mode: every transition off, so a re-measure can never read or
-   restart a half-animated height */
-#people.ppl-nofx .ppl-stage,
-#people.ppl-nofx .ppl-body,
-#people.ppl-nofx .ppl-pane,
-#people.ppl-nofx .ppl-panel,
-#people.ppl-nofx .ppl-text > * { transition: none !important; }
-
-#people.ppl-live .ppl-stage { transition: height .48s cubic-bezier(.22, 1, .36, 1), background-color .5s ease, border-color .5s ease; }
+/* Container height morphing and text choreography run via WAAPI in app.js */
 .ppl-pane {
   position: absolute; top: 0; left: 0; right: 0;
   padding: clamp(18px, 2.4vw, 30px);
-  opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(12px);
-  transition: opacity .38s ease, transform .5s cubic-bezier(.22, 1, .36, 1), visibility .38s;
+  opacity: 0; visibility: hidden; pointer-events: none;
 }
-.ppl-pane.is-on { position: relative; opacity: 1; visibility: visible; pointer-events: auto; transform: none; }
+.ppl-pane.is-on { position: relative; opacity: 1; visibility: visible; pointer-events: auto; }
 
 .ppl-id { display: flex; align-items: flex-start; gap: 14px; }
 .ppl-idtx { min-width: 0; }
 .ppl-name { font-size: clamp(21px, 2.7vw, 27px); line-height: 1.35; font-weight: 700; color: var(--ink); }
 .ppl-latin {
-  margin-top: 1px; font-family: "Times New Roman", Times, serif; direction: ltr; text-align: left;
+  margin-top: 2px; font-family: "Times New Roman", Times, serif; direction: ltr; unicode-bidi: isolate; text-align: right;
   font-size: calc(13.5px * var(--fs)); color: var(--ink-soft); letter-spacing: .3px;
 }
 .ppl-tag { margin-top: 7px; font-size: calc(15.5px * var(--fs)); line-height: 1.75; color: var(--sage-strong); }
@@ -954,22 +943,14 @@ html.ppl-lock { overflow: hidden; }
 
 /* ---- panel body -------------------------------------------------------- */
 .ppl-body { position: relative; overflow: hidden; margin-top: 20px; }
-#people.ppl-live .ppl-body { transition: height .44s cubic-bezier(.22, 1, .36, 1); }
 .ppl-panel {
   position: absolute; top: 0; left: 0; right: 0;
   display: grid; grid-template-columns: minmax(0, 1.62fr) minmax(0, 1fr);
   gap: clamp(18px, 2.6vw, 32px); align-items: start;
   opacity: 0; visibility: hidden; pointer-events: none;
-  transition: opacity .34s ease, visibility .34s;
 }
 .ppl-panel.is-on { position: relative; opacity: 1; visibility: visible; pointer-events: auto; }
-.ppl-text > * {
-  opacity: 0; transform: translateY(14px);
-  transition: opacity .4s ease, transform .5s cubic-bezier(.22, 1, .36, 1);
-}
-.ppl-panel.is-on .ppl-text > * {
-  opacity: 1; transform: none; transition-delay: calc(var(--i, 0) * 60ms + 40ms);
-}
+.ppl-text > * { opacity: 1; transform: none; }
 .ppl-text p {
   margin: 0 0 12px; color: var(--ink); text-align: justify;
   font-size: calc(20px * var(--fs)); line-height: 1.95;
@@ -1063,16 +1044,13 @@ html.ppl-lock { overflow: hidden; }
 }
 @media (max-width: 720px) {
   .ppl-switch { grid-template-columns: 1fr; gap: 4px; }
-  /* three tabs in one line: keep the label on one line and let it breathe,
-     so a two-line tab never collides with its neighbours or the divider */
+  /* three tabs in one line: keep the label balanced and breathing cleanly */
   .ppl-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; }
   .ppl-tab {
     padding: 8px 4px 10px; font-size: calc(14px * var(--fs));
     text-align: center; line-height: 1.4;
     white-space: normal; overflow-wrap: anywhere;
   }
-  .ppl-idnum { display: none; }
-  .ppl-head { text-align: start; }
   .ppl-idnum { display: none; }
 }
 @media (max-width: 430px) {
@@ -1354,7 +1332,7 @@ html.ppl-lock { overflow: hidden; }
   /* the rail keeps one dot per chapter: labels would cover the text column */
   #rail { left: 6px; width: 22px; height: clamp(320px, 72vh, 660px); --rail-pad: 16px; }
   #rail { left: 6px; width: 22px; height: clamp(320px, 72svh, 660px); --rail-pad: 16px; }
-  #rail .rail-line, #rail .rail-fill { left: 10px; }
+  #rail .rail-line, #rail .rail-fill, #rail .rail-ghost { left: 10px; }
   #rail a { left: 0; width: 22px; height: 22px; }
   #rail .dot { width: 9px; height: 9px; border-width: 1.5px; }
   #rail a.s-dot { display: none; }
@@ -1404,7 +1382,7 @@ html.ppl-lock { overflow: hidden; }
 
 @media (max-width: 560px) {
   .topbar .tb-title { display: none; }
-  .topbar { justify-content: flex-end; }
+  .topbar { justify-content: center; }
   .btn-pdf { padding: 13px 24px; gap: 9px; }
   .btn-pdf .bp-fa { font-size: 18px; white-space: nowrap; }
   .btn-pdf .bp-en { display: none; }
@@ -1413,8 +1391,15 @@ html.ppl-lock { overflow: hidden; }
 }
 
 @media (max-width: 380px) {
-  .tb-now { font-size: 11.5px; gap: 3px; padding: 0 7px; }
+  #fsToggle { display: none; }
   .topbar { padding-inline: 10px; }
+  .topbar .tb-actions { gap: 5px; }
+  .tb-btn { min-width: 38px; height: 38px; padding: 0 7px; }
+  .tb-pdf { min-height: 38px; padding: 7px 10px; }
+  .theme-toggle { width: 62px; height: 38px; padding-inline: 8px; }
+  .theme-toggle .knob { width: 26px; height: 26px; top: 4px; }
+  :root[data-theme="dark"] .theme-toggle .knob { transform: translateX(-25px); }
+  .tb-now { font-size: 11.5px; gap: 3px; padding: 0 8px; }
 }
 
 /* very short phones: the hero cannot hold a full screen, tighten it */
@@ -1621,19 +1606,8 @@ html.summary-lock { overflow: hidden; }
 }
 .sum-sheet:focus, .sum-sheet:focus-visible { outline: none; }
 
-/* Entrance choreography on first open only (all cards stay opacity:1 after) */
-.summary-dialog.is-entering .summary-bar {
-  animation: sumFadeDown .46s .06s both cubic-bezier(.22, 1, .36, 1);
-}
-.summary-dialog.is-entering .summary-head {
-  animation: sumRise .58s .14s both cubic-bezier(.22, 1, .36, 1);
-}
-.summary-dialog.is-entering .summary-card:nth-of-type(1) {
-  animation: sumRise .58s .22s both cubic-bezier(.22, 1, .36, 1);
-}
-.summary-dialog.is-entering .summary-card:nth-of-type(2) {
-  animation: sumRise .58s .29s both cubic-bezier(.22, 1, .36, 1);
-}
+/* Entrance & scroll-reveal choreography inside .summary-dialog runs via WAAPI
+   in summary.js so base CSS stays opaque at rest, during close, and in print. */
 @keyframes sumFadeDown {
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: none; }
