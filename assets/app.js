@@ -140,7 +140,7 @@
 
   var navState = { chapter: "hero", scene: null };
   var zones = [];
-  document.querySelectorAll("#hero, .chapter, .scene, #closing").forEach(function (el) {
+  document.querySelectorAll("#hero, .chapter, .scene, #people, #closing").forEach(function (el) {
     if (el.classList.contains("scene")) zones.push({ el: el, chapter: el.getAttribute("data-chapter"), scene: el.id });
     else zones.push({ el: el, chapter: el.id, scene: null });
   });
@@ -343,9 +343,14 @@
       }
     }
     var chN = /^ch(\d)$/.exec(navState.chapter);
-    if (tbNowCh) tbNowCh.textContent = chN ? "ف" + toFa(chN[1]) : navState.chapter === "closing" ? "پایان" : "آغاز";
+    var inPeople = navState.chapter === "people";
+    if (tbNowCh) {
+      tbNowCh.textContent = inPeople ? "پیوست" : chN ? "ف" + toFa(chN[1])
+        : navState.chapter === "closing" ? "پایان" : "آغاز";
+    }
     if (tbNowSl) {
-      tbNowSl.textContent = (slide < 10 ? "۰" : "") + toFa(slide) + "/" + toFa(TOTAL_SLIDES);
+      tbNowSl.textContent = inPeople ? "سه زندگی"
+        : (slide < 10 ? "۰" : "") + toFa(slide) + "/" + toFa(TOTAL_SLIDES);
     }
   }
 
@@ -657,7 +662,7 @@
   }
 
   /* ---------------------------------------------------------------- keyboard: chapters */
-  var stops = ["hero", "ch1", "ch2", "ch3", "ch4", "ch5", "closing"];
+  var stops = ["hero", "ch1", "ch2", "ch3", "ch4", "ch5", "people", "closing"];
   document.addEventListener("click", function (e) {
     var a = e.target.closest ? e.target.closest('a[href^="#"]') : null;
     if (!a || a.classList.contains("skip")) return;
@@ -804,6 +809,242 @@
   document.addEventListener("visibilitychange", function () {
     document.body.classList.toggle("tab-hidden", document.hidden);
   });
+
+  /* ==================================================================
+     PEOPLE — the Persian-only dossier (three lives, three tabs each)
+     .ppl-pane and .ppl-panel are absolutely-positioned stacks, so the two
+     wrappers carry measured heights: switching a person (or a tab) animates
+     the wrapper to the new content instead of jumping the page.
+
+     Two rules keep that honest:
+       * a height is always computed as chrome + panel, never read back from
+         a wrapper that may be mid transition;
+       * re-measuring (fonts, A+/A−, theme, resize) happens with every
+         transition switched off by a class, so no animation is restarted and
+         no half-animated number is ever measured.
+     ================================================================== */
+  (function () {
+    var sec = document.getElementById("people");
+    if (!sec) return;
+
+    var stage = sec.querySelector("[data-ppl-stage]");
+    var ink = sec.querySelector(".ppl-ink");
+    var persons = Array.prototype.slice.call(sec.querySelectorAll(".ppl-person"));
+    var panes = Array.prototype.slice.call(sec.querySelectorAll(".ppl-pane"));
+    if (!stage || !ink || !persons.length || persons.length !== panes.length) return;
+
+    var cur = 0;
+    var lastTab = panes.map(function () { return 0; });
+    var lastTouch = 0;
+    var NOFX = "ppl-nofx";
+
+    function bodyOf(pane) { return pane.querySelector("[data-ppl-body]"); }
+    function panelsOf(pane) { return pane.querySelectorAll(".ppl-panel"); }
+    function activePanel(pane) {
+      return panelsOf(pane)[lastTab[panes.indexOf(pane)]] || panelsOf(pane)[0];
+    }
+    /* the pane minus its body: title row, tabs, source line */
+    function chromeOf(pane) {
+      var body = bodyOf(pane);
+      return pane.offsetHeight - (body ? body.offsetHeight : 0);
+    }
+
+    function moveInk() {
+      var b = persons[cur];
+      if (!b) return;
+      ink.style.width = b.offsetWidth + "px";
+      ink.style.height = b.offsetHeight + "px";
+      ink.style.transform = "translate(" + b.offsetLeft + "px," + b.offsetTop + "px)";
+    }
+
+    function moveTabInk(pane) {
+      var bar = pane.querySelector(".ppl-tabink");
+      var tabs = pane.querySelectorAll(".ppl-tab");
+      var t = tabs[lastTab[panes.indexOf(pane)]];
+      if (!bar || !t) return;
+      bar.style.width = Math.max(20, t.offsetWidth - 24) + "px";
+      bar.style.transform = "translate(" + (t.offsetLeft + 12) + "px," +
+                            (t.offsetTop + t.offsetHeight - 3) + "px)";
+    }
+
+    /* give a pane's body the height of its active panel; return the height the
+       pane itself must therefore take on the stage */
+    function sizePane(pane) {
+      var body = bodyOf(pane), panel = activePanel(pane);
+      var h = panel ? panel.offsetHeight : 0;
+      var chrome = chromeOf(pane);
+      if (body) body.style.height = h + "px";
+      return chrome + h;
+    }
+
+    function touch() { lastTouch = Date.now(); }
+
+    /* anything not on screen must not be reachable by Tab or by a screen
+       reader: aria-hidden alone leaves focusable buttons inside it, so the
+       node is also made inert (and its buttons are parked at tabindex -1 on
+       engines without inert) */
+    function setHidden(el, hidden) {
+      if (hidden) el.setAttribute("aria-hidden", "true");
+      else el.removeAttribute("aria-hidden");
+      if ("inert" in el) el.inert = !!hidden;
+      Array.prototype.forEach.call(el.querySelectorAll("button"), function (b) {
+        if (hidden) b.setAttribute("tabindex", "-1");
+        else if (b.hasAttribute("data-ti")) b.removeAttribute("tabindex");
+      });
+    }
+    Array.prototype.forEach.call(sec.querySelectorAll(".ppl-tab"), function (b) {
+      b.setAttribute("data-ti", "");         /* remember which buttons it "owns" */
+    });
+
+    function showPane(i) {
+      cur = i;
+      touch();
+      persons.forEach(function (b, k) {
+        b.setAttribute("aria-selected", k === i ? "true" : "false");
+        b.tabIndex = k === i ? 0 : -1;
+      });
+      panes.forEach(function (p, k) {
+        p.classList.toggle("is-on", k === i);
+        setHidden(p, k !== i);
+      });
+      moveInk();
+      var h = sizePane(panes[i]);
+      panes.forEach(moveTabInk);
+      stage.style.height = h + "px";
+    }
+
+    function selectTab(pane, k) {
+      var tabs = Array.prototype.slice.call(pane.querySelectorAll(".ppl-tab"));
+      var panels = panelsOf(pane);
+      if (!tabs.length || k < 0 || k >= tabs.length) return;
+      touch();
+      lastTab[panes.indexOf(pane)] = k;
+      tabs.forEach(function (b, j) {
+        b.setAttribute("aria-selected", j === k ? "true" : "false");
+        b.tabIndex = j === k ? 0 : -1;
+      });
+      Array.prototype.forEach.call(panels, function (p, j) {
+        p.classList.toggle("is-on", j === k);
+        setHidden(p, j !== k);
+      });
+      moveTabInk(pane);
+      var h = sizePane(pane);
+      if (pane === panes[cur]) stage.style.height = h + "px";
+    }
+
+    /* fonts, A+/A−, theme, resize — measured with all transitions disabled */
+    function refit() {
+      if (Date.now() - lastTouch < 640) { setTimeout(refit, 660); return; }
+      sec.classList.add(NOFX);
+      var h = 0;
+      panes.forEach(function (pane) {
+        var body = bodyOf(pane), panel = activePanel(pane);
+        if (body) body.style.height = (panel ? panel.offsetHeight : 0) + "px";
+      });
+      panes.forEach(function (pane) {      /* one layout pass, then measure */
+        if (pane === panes[cur]) h = chromeOf(pane) + (activePanel(pane) ? activePanel(pane).offsetHeight : 0);
+        else sizePane(pane);
+      });
+      if (!h) h = sizePane(panes[cur]);
+      stage.style.height = h + "px";
+      moveInk();
+      panes.forEach(moveTabInk);
+      void stage.offsetHeight;
+      requestAnimationFrame(function () { sec.classList.remove(NOFX); });
+      /* the dossier sits after the pinned ZPD scene, so its height only
+         matters for total scroll length — refresh so the pin stays exact */
+      if (window.ScrollTrigger) {
+        try { ScrollTrigger.refresh(); } catch (e) {}
+      }
+    }
+
+    var refitTimer = 0;
+    function scheduleRefit() {
+      clearTimeout(refitTimer);
+      refitTimer = setTimeout(refit, 120);
+    }
+
+    /* click + keyboard for both tablists (RTL: left arrow moves forward) */
+    function wire(items, count, pick) {
+      items.forEach(function (btn, i) {
+        btn.addEventListener("click", function () { pick(i, false); });
+        btn.addEventListener("keydown", function (e) {
+          var n = -1;
+          if (e.key === "ArrowLeft") n = (i + 1) % count;
+          else if (e.key === "ArrowRight") n = (i - 1 + count) % count;
+          else if (e.key === "Home") n = 0;
+          else if (e.key === "End") n = count - 1;
+          else return;
+          e.preventDefault();
+          pick(n, true);
+          items[n].focus();
+        });
+      });
+    }
+
+    wire(persons, persons.length, function (i, focus) {
+      showPane(i);
+      if (focus) persons[i].focus();
+    });
+    panes.forEach(function (pane) {
+      var tabs = Array.prototype.slice.call(pane.querySelectorAll(".ppl-tab"));
+      wire(tabs, tabs.length, function (j, focus) {
+        selectTab(pane, j);
+        if (focus) tabs[j].focus();
+      });
+    });
+
+    panes.forEach(function (p, i) {
+      setHidden(p, i !== 0);
+      Array.prototype.forEach.call(panelsOf(p), function (pan, j) {
+        setHidden(pan, j !== lastTab[i]);
+      });
+    });
+    /* a horizontal flick on the dossier turns the page (RTL: a flick to the
+       right is "next"), which is how tabs are expected to behave on a phone */
+    var tX = 0, tY = 0, tT = 0;
+    stage.addEventListener("touchstart", function (e) {
+      if (e.touches.length !== 1) return;
+      tX = e.touches[0].clientX; tY = e.touches[0].clientY; tT = Date.now();
+    }, { passive: true });
+    stage.addEventListener("touchend", function (e) {
+      var t = e.changedTouches && e.changedTouches[0];
+      if (!t) return;
+      var dx = t.clientX - tX, dy = t.clientY - tY;
+      if (Date.now() - tT > 700 || Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      showPane((cur + (dx > 0 ? 1 : -1) + panes.length) % panes.length);
+    }, { passive: true });
+
+    refit();
+    requestAnimationFrame(function () { sec.classList.add("ppl-live"); });
+
+    window.addEventListener("resize", scheduleRefit);
+    window.addEventListener("load", scheduleRefit);
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () { setTimeout(refit, 80); });
+    }
+    if (window.MutationObserver) {
+      new MutationObserver(scheduleRefit)
+        .observe(document.documentElement, { attributes: true, attributeFilter: ["data-fs", "data-theme"] });
+    }
+
+    /* debug/testing handle */
+    window.__people = {
+      go: function (i) { showPane(i); },
+      tab: function (i) { selectTab(panes[cur], i); },
+      state: function () {
+        var pane = panes[cur], body = bodyOf(pane), panel = activePanel(pane);
+        return {
+          person: cur, pane: pane.id, tab: lastTab[cur],
+          stage: Math.round(stage.offsetHeight),
+          paneH: Math.round(pane.offsetHeight),
+          bodyH: Math.round(body.offsetHeight),
+          panelH: panel ? Math.round(panel.offsetHeight) : null,
+          clipped: pane.offsetHeight > stage.offsetHeight + 1
+        };
+      }
+    };
+  })();
 
   /* debug/testing handle */
   window.__rail = {

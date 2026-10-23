@@ -538,6 +538,281 @@ body.tab-hidden .blob { animation-play-state: paused; }
 .fnbar .fn-sm { font-size: calc(13px * var(--fs)); }
 .fnbar .fn-xs { font-size: calc(12px * var(--fs)); }
 
+/* ---------------------------------------------------------------- 09b people
+   Persian-only dossier: three lives, three tabs each. Cards, pills and the
+   PDF highlight colours come from the deck above, so the section reads as
+   part of the same document rather than a widget bolted onto it.
+   Panes and panels are absolutely-positioned stacks, so app.js measures them
+   and animates the two wrapper heights — switching never jumps the page. */
+
+#people {
+  position: relative;
+  padding: clamp(46px, 8vh, 84px) 0 clamp(40px, 6vh, 68px);
+  border-top: 1px solid var(--line);
+  transition: border-color .5s ease;
+}
+.ppl-head { max-width: 780px; margin-inline: auto; text-align: center; }
+.ppl-kicker {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: calc(15px * var(--fs)); font-weight: 700; color: var(--sage-strong);
+}
+.ppl-kicker::before, .ppl-kicker::after {
+  content: ""; width: 26px; height: 2px; border-radius: 2px; background: var(--sage);
+  opacity: .75;
+}
+.ppl-h2 {
+  margin-top: 12px; color: var(--ink);
+  font-size: clamp(26px, 4.2vw, 40px); line-height: 1.34; font-weight: 700;
+}
+.ppl-sub {
+  margin: 10px auto 0; max-width: 62ch; color: var(--ink-soft);
+  font-size: calc(17px * var(--fs)); line-height: 1.95; text-align: justify;
+}
+
+/* ---- the three people -------------------------------------------------- */
+.ppl-switch {
+  position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px; margin-top: clamp(18px, 3vw, 28px); padding: 7px;
+  background: var(--panel); border: 1.5px solid var(--line); border-radius: 22px;
+  transition: background-color .5s ease, border-color .5s ease;
+}
+.ppl-ink {
+  position: absolute; top: 0; left: 0; z-index: 0;
+  background: var(--card); border: 1.5px solid var(--line); border-radius: 16px;
+  box-shadow: 0 16px 32px -26px rgba(55, 65, 81, .55);
+  transition: transform .48s cubic-bezier(.22, 1, .36, 1),
+              width .48s cubic-bezier(.22, 1, .36, 1),
+              height .48s cubic-bezier(.22, 1, .36, 1),
+              background-color .5s ease, border-color .5s ease;
+}
+.ppl-person {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; gap: 12px; min-width: 0;
+  padding: 11px 13px; border: 0; border-radius: 16px; background: none;
+  font: inherit; color: var(--ink); text-align: start; cursor: pointer;
+  transition: transform .35s ease, color .3s ease;
+}
+.ppl-person:hover { transform: translateY(-1px); }
+.ppl-person:active { transform: translateY(0); }
+.ppl-mono {
+  flex: 0 0 auto; width: clamp(38px, 3.6vw, 46px); height: clamp(38px, 3.6vw, 46px);
+  display: grid; place-items: center; border-radius: 50%;
+  background: var(--beige-soft); color: var(--sage-strong);
+  font-size: calc(21px * var(--fs)); font-weight: 700; line-height: 1;
+  transition: background-color .4s ease, color .4s ease;
+}
+.ppl-person[aria-selected="true"] .ppl-mono {
+  background: var(--surface); color: var(--on-surface);
+  animation: pplPop .52s cubic-bezier(.22, 1, .36, 1);
+}
+@keyframes pplPop { 0% { transform: scale(.82); } 55% { transform: scale(1.09); } 100% { transform: scale(1); } }
+.ppl-pinfo { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ppl-pname { font-size: calc(18.5px * var(--fs)); font-weight: 700; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ppl-platin {
+  font-family: "Times New Roman", Times, serif; direction: ltr; text-align: left;
+  font-size: calc(12.5px * var(--fs)); color: var(--ink-soft); letter-spacing: .2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---- stage: one pane per person --------------------------------------- */
+.ppl-stage {
+  position: relative; overflow: hidden; margin-top: 14px;
+  background: var(--card); border: 1.5px solid var(--line); border-radius: 24px;
+  box-shadow: var(--shadow);
+  transition: background-color .5s ease, border-color .5s ease;
+}
+/* measuring mode: every transition off, so a re-measure can never read or
+   restart a half-animated height */
+#people.ppl-nofx .ppl-stage,
+#people.ppl-nofx .ppl-body,
+#people.ppl-nofx .ppl-pane,
+#people.ppl-nofx .ppl-panel,
+#people.ppl-nofx .ppl-text > * { transition: none !important; }
+
+#people.ppl-live .ppl-stage { transition: height .52s cubic-bezier(.22, 1, .36, 1), background-color .5s ease, border-color .5s ease; }
+.ppl-pane {
+  position: absolute; top: 0; left: 0; right: 0;
+  padding: clamp(18px, 2.4vw, 30px);
+  opacity: 0; visibility: hidden; transform: translateY(12px);
+  transition: opacity .38s ease, transform .5s cubic-bezier(.22, 1, .36, 1), visibility .38s;
+}
+.ppl-pane.is-on { opacity: 1; visibility: visible; transform: none; }
+
+.ppl-id { display: flex; align-items: flex-start; gap: 14px; }
+.ppl-idtx { min-width: 0; }
+.ppl-name { font-size: clamp(21px, 2.7vw, 27px); line-height: 1.35; font-weight: 700; color: var(--ink); }
+.ppl-latin {
+  margin-top: 1px; font-family: "Times New Roman", Times, serif; direction: ltr; text-align: left;
+  font-size: calc(13.5px * var(--fs)); color: var(--ink-soft); letter-spacing: .3px;
+}
+.ppl-tag { margin-top: 7px; font-size: calc(15.5px * var(--fs)); line-height: 1.75; color: var(--sage-strong); }
+.ppl-idnum {
+  margin-inline-start: auto; flex: 0 0 auto; display: flex; flex-direction: column;
+  align-items: center; gap: 1px; padding-top: 2px;
+}
+.ppl-idnum span { font-size: calc(11.5px * var(--fs)); color: var(--ink-soft); }
+.ppl-idnum b { font-size: calc(14px * var(--fs)); color: var(--sage-strong); }
+
+/* ---- the three tabs inside a person ----------------------------------- */
+.ppl-tabs {
+  position: relative; display: flex; flex-wrap: wrap; gap: 2px;
+  margin-top: 16px; padding-bottom: 1px; border-bottom: 1.5px solid var(--line);
+}
+.ppl-tab {
+  position: relative; z-index: 1; border: 0; background: none; font: inherit;
+  padding: 9px 14px 12px; border-radius: 12px 12px 0 0; cursor: pointer;
+  font-size: calc(16.5px * var(--fs)); line-height: 1.4; color: var(--ink-soft);
+  transition: color .3s ease, background-color .3s ease;
+}
+.ppl-tab:hover { color: var(--sage-strong); background: color-mix(in srgb, var(--sage) 8%, transparent); }
+.ppl-tab[aria-selected="true"] { color: var(--sage-strong); font-weight: 700; }
+.ppl-tabink {
+  position: absolute; top: 0; left: 0; height: 3px; border-radius: 3px; background: var(--sage);
+  transition: transform .42s cubic-bezier(.22, 1, .36, 1), width .42s cubic-bezier(.22, 1, .36, 1);
+}
+
+/* ---- panel body -------------------------------------------------------- */
+.ppl-body { position: relative; overflow: hidden; margin-top: 20px; }
+#people.ppl-live .ppl-body { transition: height .44s cubic-bezier(.22, 1, .36, 1); }
+.ppl-panel {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: grid; grid-template-columns: minmax(0, 1.62fr) minmax(0, 1fr);
+  gap: clamp(18px, 2.6vw, 32px); align-items: start;
+  opacity: 0; visibility: hidden;
+  transition: opacity .34s ease, visibility .34s;
+}
+.ppl-panel.is-on { opacity: 1; visibility: visible; }
+.ppl-text > * {
+  opacity: 0; transform: translateY(14px);
+  transition: opacity .4s ease, transform .5s cubic-bezier(.22, 1, .36, 1);
+}
+.ppl-panel.is-on .ppl-text > * {
+  opacity: 1; transform: none; transition-delay: calc(var(--i, 0) * 60ms + 40ms);
+}
+.ppl-text p {
+  margin: 0 0 12px; color: var(--ink); text-align: justify;
+  font-size: calc(20px * var(--fs)); line-height: 1.95;
+  overflow-wrap: break-word;
+}
+.ppl-text p:last-child { margin-bottom: 0; }
+.ppl-text p b[class*="hl-"] { font-weight: 700; }
+.ppl-quote {
+  position: relative; margin: 16px 0 0; padding: 13px 20px 12px;
+  background: var(--beige-soft); border-radius: 12px;
+  border-inline-start: 3px solid var(--sage);
+  color: var(--sage-strong); font-size: calc(17px * var(--fs)); line-height: 1.85;
+  text-align: start;
+}
+.ppl-qmark {
+  position: absolute; inset-inline-start: 9px; top: -1px;
+  font-size: 30px; line-height: 1; color: var(--sage); opacity: .4;
+}
+.ppl-quote footer { margin-top: 3px; color: var(--ink-soft); font-size: calc(13.5px * var(--fs)); line-height: 1.7; }
+
+/* the "at a glance" card: a dossier slip, stretched to the text's height,
+   with the person's initial as a watermark so the empty room is designed */
+.ppl-facts {
+  align-self: stretch; position: relative; overflow: hidden;
+  display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+  padding: 15px 17px 17px;
+  transition: background-color .5s ease, border-color .5s ease;
+}
+.ppl-wm {
+  position: absolute; inset-inline-start: -10px; bottom: -34px;
+  font-size: 132px; line-height: 1; font-weight: 700;
+  color: var(--sage); opacity: .07; pointer-events: none; user-select: none;
+}
+.ppl-facts h4 {
+  position: relative; display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+  font-size: calc(15.5px * var(--fs)); font-weight: 700; color: var(--sage-strong);
+}
+.ppl-facts h4::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--line); }
+.ppl-facts ul {
+  position: relative; list-style: none; margin: 0; padding: 0;
+  flex: 1 1 auto; display: grid; gap: 12px; align-content: space-evenly;
+}
+.ppl-facts li {
+  position: relative; padding-inline-start: 15px; display: grid; gap: 1px;
+  font-size: calc(15px * var(--fs)); line-height: 1.62;
+}
+.ppl-facts li::before {
+  content: ""; position: absolute; inset-inline-start: 0; top: .66em;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--sage-soft);
+}
+.ppl-k { color: var(--ink-soft); font-size: calc(12.5px * var(--fs)); }
+.ppl-v { color: var(--ink); }
+
+.ppl-src {
+  margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--line);
+  color: var(--ink-soft); font-size: calc(13px * var(--fs)); line-height: 1.75;
+}
+
+/* no JS: the controls cannot work, so show every panel as one long read */
+:root:not(.js) .ppl-switch,
+:root:not(.js) .ppl-tabs,
+:root:not(.js) .ppl-ink,
+:root:not(.js) .ppl-tabink { display: none; }
+:root:not(.js) .ppl-stage,
+:root:not(.js) .ppl-body { height: auto !important; }
+:root:not(.js) .ppl-pane,
+:root:not(.js) .ppl-panel { position: static; opacity: 1; visibility: visible; transform: none; }
+:root:not(.js) .ppl-panel { margin-bottom: 26px; }
+:root:not(.js) .ppl-text > * { opacity: 1; transform: none; }
+:root:not(.js) .ppl-pane { border-top: 1px solid var(--line); }
+
+@media (max-width: 900px) {
+  .ppl-panel { grid-template-columns: 1fr; }
+  .ppl-facts { align-self: start; }
+  .ppl-wm { font-size: 108px; bottom: -26px; }
+}
+/* three abreast is still right here, but not enough width for a full name
+   beside the monogram: stack them and drop the Latin line (it stays in the
+   pane header) so no name is ever cut with an ellipsis */
+@media (min-width: 721px) and (max-width: 940px) {
+  .ppl-person { gap: 10px; padding: 10px 11px; }
+  .ppl-mono { width: 34px; height: 34px; font-size: calc(17px * var(--fs)); }
+  .ppl-pname { white-space: normal; font-size: calc(15.5px * var(--fs)); line-height: 1.32; }
+  .ppl-platin { display: none; }
+}
+@media (max-width: 720px) {
+  .ppl-switch { grid-template-columns: 1fr; gap: 4px; }
+  /* three tabs in one line: keep the label on one line and let it breathe,
+     so a two-line tab never collides with its neighbours or the divider */
+  .ppl-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; }
+  .ppl-tab {
+    padding: 8px 4px 10px; font-size: calc(14px * var(--fs));
+    text-align: center; line-height: 1.4;
+    white-space: normal; overflow-wrap: anywhere;
+  }
+  .ppl-idnum { display: none; }
+  .ppl-head { text-align: start; }
+  .ppl-idnum { display: none; }
+}
+@media (max-width: 430px) {
+  .ppl-tab { font-size: calc(13px * var(--fs)); padding: 8px 3px 10px; }
+}
+@media (max-width: 480px) {
+  .ppl-pane { padding: 16px 13px; }
+  .ppl-text p { font-size: calc(18px * var(--fs)); line-height: 1.9; }
+  .ppl-name { font-size: calc(19px * var(--fs)); }
+  .ppl-tag { font-size: calc(14.5px * var(--fs)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ppl-ink, .ppl-tabink, .ppl-stage, .ppl-body, .ppl-pane, .ppl-panel,
+  .ppl-text > *, .ppl-person, .ppl-mono { transition: none !important; }
+  .ppl-person[aria-selected="true"] .ppl-mono { animation: none; }
+  .ppl-text > * { opacity: 1; transform: none; }
+}
+
+@media print {
+  .ppl-switch, .ppl-tabs { display: none !important; }
+  .ppl-stage, .ppl-body { height: auto !important; }
+  .ppl-pane, .ppl-panel { position: static; opacity: 1; visibility: visible; transform: none; }
+  .ppl-text > * { opacity: 1; transform: none; }
+}
+
 /* ---------------------------------------------------------------- 10 ZPD (GSAP pinned) */
 /* ScrollTrigger owns the pin on this slide: the stage is the pinned node
    and only its children are animated, so nothing here may set sticky, a
