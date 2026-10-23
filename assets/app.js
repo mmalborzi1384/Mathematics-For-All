@@ -595,11 +595,15 @@
      quietly moved under them, and the next scroll down "jumped". The bottom
      is now an anchor: same place before and after the change. */
   function onViewportChange() {
+    /* While a modal reading view (#summary or #people) owns the screen,
+       never force layout/scroll passes on the hidden deck underneath when
+       mobile browser chrome hides or shows on scroll stop. */
+    if (root.classList.contains("ppl-lock") || root.classList.contains("summary-lock")) return;
     var atBottom = lastY + lastVH >= lastDocH - 4;
     var yNow = window.scrollY || 0;
     requestScroll();
     scheduleLayout();
-    if (!atBottom || root.classList.contains("ppl-lock") || root.classList.contains("summary-lock")) return;
+    if (!atBottom) return;
     /* the layout lands a frame or two later (and once more when webfonts or
        a lazy image settle), so the anchor is checked twice — but only while
        the reader has not scrolled away from where they were */
@@ -892,7 +896,7 @@
     var closers = Array.prototype.slice.call(sec.querySelectorAll("[data-ppl-close]"));
     var behind = Array.prototype.slice.call(document.querySelectorAll("main, .topbar, #rail, #toTop"));
     var isOpen = false, savedY = 0, lastFocus = null, pushed = false;
-    var closeTimer = 0, openedAt = 0;
+    var closeTimer = 0, settleTimer = 0, restorePopY = null, openedAt = 0;
 
     function behindInert(on) {
       behind.forEach(function (el) {
@@ -903,17 +907,7 @@
       });
     }
 
-    function open(opts) {
-      if (isOpen) return;
-      isOpen = true;
-      openedAt = Date.now();
-      lastFocus = document.activeElement;
-      savedY = window.scrollY || root.scrollTop || 0;
-      clearTimeout(closeTimer);
-
-      /* the wipe grows out of the hub of the card that was just pressed —
-         but only if that hub is on screen (a deep link, or an open() from
-         the console, has no card to grow from: then it starts centred) */
+    function computeOrigin() {
       var W = window.innerWidth, H = window.innerHeight;
       var cx = W / 2, cy = H * 0.42, hub = portal && portal.querySelector(".portal-hub");
       if (hub) {
@@ -923,12 +917,23 @@
           cy = r.top + r.height / 2;
         }
       }
-      /* a radius that always reaches the furthest corner, so the last frame
-         of the wipe is the full screen and never a clipped circle */
-      var reach = Math.ceil(Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy))) + 24;
+      var reach = Math.ceil(Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy))) + 28;
       sec.style.setProperty("--ppl-ox", cx.toFixed(1) + "px");
       sec.style.setProperty("--ppl-oy", cy.toFixed(1) + "px");
       sec.style.setProperty("--ppl-r", reach + "px");
+    }
+
+    function open(opts) {
+      if (isOpen) return;
+      isOpen = true;
+      openedAt = Date.now();
+      lastFocus = document.activeElement;
+      savedY = window.scrollY || root.scrollTop || 0;
+      clearTimeout(closeTimer);
+      clearTimeout(settleTimer);
+
+      sec.classList.remove("is-settled");
+      computeOrigin();
 
       root.classList.add("ppl-lock");
       sec.classList.add("is-mounted");
@@ -942,6 +947,9 @@
       sec.classList.add("is-entering");
       void sec.offsetHeight;
       requestAnimationFrame(function () { if (isOpen) sec.classList.add("is-open"); });
+      settleTimer = setTimeout(function () {
+        if (isOpen) sec.classList.add("is-settled");
+      }, reduced() ? 0 : 860);
       setTimeout(function () { sec.classList.remove("is-entering"); }, 1250);
 
       setTimeout(function () {
@@ -964,21 +972,27 @@
     function close(fromHistory) {
       if (!isOpen) return;
       isOpen = false;
-      sec.classList.remove("is-open", "is-entering");
+      clearTimeout(settleTimer);
+      computeOrigin();
+      sec.classList.remove("is-settled", "is-entering");
+      void sec.offsetHeight;
+      requestAnimationFrame(function () { sec.classList.remove("is-open"); });
       sec.setAttribute("aria-hidden", "true");
       if ("inert" in sec) sec.inert = true;
       else sec.setAttribute("inert", "");
       behindInert(false);
       root.classList.remove("ppl-lock");
       scrollNow(savedY);                 /* exact, and never animated */
+      scheduleLayout();
       clearTimeout(closeTimer);
       /* the wipe is .82s; leaving is-mounted on a little longer keeps the
          last frames of the circle from being cut off */
-      closeTimer = setTimeout(function () { if (!isOpen) sec.classList.remove("is-mounted"); }, 900);
+      closeTimer = setTimeout(function () { if (!isOpen) sec.classList.remove("is-mounted", "is-open"); }, reduced() ? 0 : 900);
 
       if (pushed && !fromHistory) {
         pushed = false;
-        try { history.back(); } catch (e) {}
+        restorePopY = savedY;
+        try { history.back(); } catch (e) { restorePopY = null; }
       } else if (!pushed && location.hash === "#people") {
         try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
       }
@@ -1000,6 +1014,12 @@
       b.addEventListener("click", function () { close(false); });
     });
     window.addEventListener("popstate", function () {
+      if (restorePopY !== null) {
+        var y = restorePopY;
+        restorePopY = null;
+        scrollNow(y);
+        return;
+      }
       if (!isOpen) return;
       if (Date.now() - openedAt < 450) return;   /* the close's own history.back() */
       close(true);
