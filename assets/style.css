@@ -1427,3 +1427,32 @@ html.ppl-lock, html.ppl-lock body { overflow: hidden; }
   .hero-card, .thanks-card, .pill, .btn-pdf { background: #fff !important; color: #1a1a1a !important; border: 1px solid #999; }
   .hl-sage, .hl-olive, .hl-gold, .hl-tan, .hl-rust, .hl-plum, .hl-brown { color: #1a1a1a !important; }
 }
+
+/* Chapter prelude — reuses the dossier's visual language, not its state. */
+#summaryPortal { padding: clamp(32px, 6svh, 72px) 0; position: relative; z-index: 1; }
+.summary-art { animation: summaryFloat 7s ease-in-out infinite; }
+@keyframes summaryFloat { 50% { transform: translateY(-7px) rotate(-2deg); } }
+.summary-content { position: relative; z-index: 1; background: var(--bg); color: var(--ink); }
+.summary-wrap { width: min(880px, calc(100% - 40px)); margin-inline: auto; padding-block: 32px 60px; }
+.summary-head { margin-bottom: 32px; }
+.summary-head h2 { font-size: clamp(30px, 5vw, 46px); line-height: 1.5; margin: 12px 0; }
+.summary-head h3 { font-size: clamp(23px, 3vw, 29px); line-height: 1.8; margin-block: 24px 12px; }
+.summary-head p, .summary-card { font-size: calc(clamp(21px, 2vw, 24px) * var(--fs)); line-height: 1.95; }
+.summary-head p, .summary-card p, .summary-card li { text-align: justify; overflow-wrap: break-word; }
+.summary-card { background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: clamp(20px, 4vw, 36px); margin-block: 22px; box-shadow: var(--shadow); }
+.summary-card h3 { margin: 0 0 16px; font-size: 1.18em; line-height: 1.6; }
+.summary-card p { margin-block: 14px; }
+.summary-card ul, .summary-card ol { padding-inline-start: 25px; }
+.summary-card li + li { margin-top: 12px; }
+.summary-number { display: block; color: var(--sage-strong); font-size: .85em; margin-bottom: 8px; }
+.summary-keywords { border-top: 1px solid var(--line); padding-top: 16px; }
+.summary-dialog { inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: var(--bg); color: var(--ink); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; clip-path: circle(0% at 50% 42%); transition: clip-path .65s cubic-bezier(.62,.01,.2,1); }
+.summary-dialog.is-open { clip-path: circle(150% at 50% 42%); }
+.summary-dialog::backdrop { background: transparent; }
+.summary-bar { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line); padding: max(12px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)); display: flex; justify-content: flex-start; }
+.summary-finish { margin-top: 12px; }
+html.summary-lock, html.summary-lock body { overflow: hidden; }
+#summaryTitle:focus { outline: none; }
+@media (max-width: 560px) { .summary-wrap { width: calc(100% - 28px); } .summary-card { border-radius: 20px; } }
+@media (prefers-reduced-motion: reduce) { .summary-art { animation: none; } .summary-dialog { transition: none; } }
+@media print { #summaryPortal, .summary-bar, .summary-finish { display: none !important; } .summary-dialog { display: block !important; position: static !important; height: auto !important; overflow: visible !important; clip-path: none !important; } .summary-card { box-shadow: none; break-inside: avoid; } }

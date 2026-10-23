@@ -599,12 +599,12 @@
     var yNow = window.scrollY || 0;
     requestScroll();
     scheduleLayout();
-    if (!atBottom || root.classList.contains("ppl-lock")) return;
+    if (!atBottom || root.classList.contains("ppl-lock") || root.classList.contains("summary-lock")) return;
     /* the layout lands a frame or two later (and once more when webfonts or
        a lazy image settle), so the anchor is checked twice — but only while
        the reader has not scrolled away from where they were */
     function reanchor() {
-      if (root.classList.contains("ppl-lock")) return;
+      if (root.classList.contains("ppl-lock") || root.classList.contains("summary-lock")) return;
       if (Math.abs((window.scrollY || 0) - yNow) > 2) return;   /* the reader moved */
       var max = maxScroll();
       if (Math.abs((window.scrollY || 0) - max) > 2) scrollNow(max);
@@ -708,7 +708,7 @@
     var a = e.target.closest ? e.target.closest('a[href^="#"]') : null;
     if (!a || a.classList.contains("skip")) return;
     /* the dossier trigger is a door, not an anchor: the people module owns it */
-    if (a.hasAttribute("data-ppl-open")) return;
+    if (a.hasAttribute("data-ppl-open") || a.hasAttribute("data-summary-open")) return;
     var id = a.getAttribute("href").slice(1);
     if (!id || !document.getElementById(id)) return;
     e.preventDefault();
@@ -716,7 +716,7 @@
   });
 
   document.addEventListener("keydown", function (e) {
-    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.metaKey || e.ctrlKey || e.altKey || root.classList.contains("summary-lock")) return;
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     var t = e.target;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
