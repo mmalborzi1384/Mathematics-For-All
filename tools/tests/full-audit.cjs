@@ -200,14 +200,19 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         const st = window.__people.state();
         const firstP = document.querySelector('.ppl-pane.is-on .ppl-panel.is-on .ppl-text p');
         const cs = getComputedStyle(firstP);
+        const wordStreaming = [...firstP.querySelectorAll('.tw-tok')].some(
+          t => parseFloat(getComputedStyle(t).opacity) < 0.99
+        );
         return {
           anims: st.activeAnims,
           transform: cs.transform,
-          opacity: parseFloat(cs.opacity)
+          opacity: parseFloat(cs.opacity),
+          wordStreaming
         };
       });
       ok(personMid.anims >= 4, `person switch runs live WAAPI choreography (${personMid.anims} anims) at ${width}`);
-      ok(personMid.transform !== 'none' || personMid.opacity < 0.99, `person switch interpolates prose live at ${width}`);
+      ok(personMid.transform !== 'none' || personMid.opacity < 0.99 || personMid.wordStreaming,
+        `person switch interpolates prose live at ${width}`);
 
       await page.waitForFunction(() => window.__people.state().activeAnims === 0, { timeout: 2500 });
       const personSettled = await page.evaluate(() => {
@@ -229,10 +234,14 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         const st = window.__people.state();
         const firstP = document.querySelector('.ppl-pane.is-on .ppl-panel.is-on .ppl-text p');
         const cs = getComputedStyle(firstP);
-        return { anims: st.activeAnims, transform: cs.transform, opacity: parseFloat(cs.opacity) };
+        const wordStreaming = [...firstP.querySelectorAll('.tw-tok')].some(
+          t => parseFloat(getComputedStyle(t).opacity) < 0.99
+        );
+        return { anims: st.activeAnims, transform: cs.transform, opacity: parseFloat(cs.opacity), wordStreaming };
       });
       ok(tabMid.anims >= 3, `tab switch runs live WAAPI choreography (${tabMid.anims} anims) at ${width}`);
-      ok(tabMid.transform !== 'none' || tabMid.opacity < 0.99, `tab switch interpolates incoming text live at ${width}`);
+      ok(tabMid.transform !== 'none' || tabMid.opacity < 0.99 || tabMid.wordStreaming,
+        `tab switch interpolates incoming text live at ${width}`);
 
       await delay(500);
 
@@ -370,14 +379,45 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         allJustified,
         pdfOk: pdfRes.status === 200 && pdfBuf.byteLength === 921255,
         zpdReady: window.__rail.zpd().pinned === true,
-        cacheSynced: cacheTags.every(t => t && t.includes('?v=20261023d'))
+        cacheSynced: cacheTags.every(t => t && t.includes('?v=20261023e'))
       };
     });
     ok(deckAudit.exactOrder, 'all 29 scenes (#s2..#s30) present in exact PDF order');
     ok(deckAudit.allJustified, 'every slide translation & original paragraph remains text-align: justify');
     ok(deckAudit.pdfOk, 'assets/Mathematics-For-All.pdf serves 200 OK with exact 921,255 bytes');
     ok(deckAudit.zpdReady, 'Slide 23 (#s23) ZPD ScrollTrigger pin active and healthy');
-    ok(deckAudit.cacheSynced, 'style.css, app.js, and summary.js share unified cache-buster ?v=20261023d');
+    ok(deckAudit.cacheSynced, 'style.css, app.js, and summary.js share unified cache-buster ?v=20261023e');
+
+    /* Verify #hero velvet opening choreography, Bidi Latin run order, & zero resting GPU layers */
+    await deckPage.waitForFunction(() => window.__heroMotion && !window.__heroMotion.stats().animating, { timeout: 4000 });
+    const heroAudit = await deckPage.evaluate(() => {
+      const stats = window.__heroMotion.stats();
+      const cardFaLang = document.getElementById('heroCardFa')?.getAttribute('lang');
+      const courseLatin = [...document.querySelectorAll('#hero .hero-course .hero-ltr-run .w')]
+        .map(w => ({ text: w.textContent, left: w.getBoundingClientRect().left }));
+      const courseOrderOk =
+        courseLatin.length === 3 &&
+        courseLatin[0].text === 'Mathematics' &&
+        courseLatin[1].text === 'For' &&
+        courseLatin[2].text === 'All' &&
+        courseLatin[0].left < courseLatin[1].left &&
+        courseLatin[1].left < courseLatin[2].left;
+      const faLefts = [...document.querySelectorAll('#heroCardFa .hc-1 .w')].map(w => w.getBoundingClientRect().left);
+      const enLefts = [...document.querySelectorAll('#heroCardEn .hc-1 .w')].map(w => w.getBoundingClientRect().left);
+      const faRtlOk = faLefts.length === 3 && faLefts[0] > faLefts[1] && faLefts[1] > faLefts[2];
+      const enLtrOk = enLefts.length === 3 && enLefts[0] < enLefts[1] && enLefts[1] < enLefts[2];
+      const restingClean = [...document.querySelectorAll('#hero .w')].every(w => {
+        const cs = getComputedStyle(w);
+        return cs.opacity === '1' && cs.filter === 'none' && cs.willChange === 'auto';
+      });
+      return { stats, cardFaLang, courseOrderOk, faRtlOk, enLtrOk, restingClean };
+    });
+    ok(heroAudit.cardFaLang === 'fa', '#heroCardFa declares semantic lang="fa"');
+    ok(heroAudit.stats.groups === 5 && heroAudit.stats.words >= 50 && heroAudit.stats.active === 0,
+      `#hero velvet word engine tokenized all 5 opening groups (${heroAudit.stats.words} words) and settled to 0 active animations`);
+    ok(heroAudit.courseOrderOk, 'Mathematics For All inside RTL .hero-course preserves strict LTR visual word order');
+    ok(heroAudit.faRtlOk && heroAudit.enLtrOk, '#heroCardFa words flow RTL while #heroCardEn words flow LTR');
+    ok(heroAudit.restingClean, 'all #hero .w spans release filter & will-change cleanly to auto at rest');
 
     /* Verify A+ / A- / Theme buttons in main topbar */
     await deckPage.click('#fsUp');

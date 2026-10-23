@@ -45,7 +45,7 @@
 
   function tsIsLtr(el) {
     if (!el) return false;
-    if (el.closest && el.closest('[dir="ltr"], [lang="en"], .en, .boxin-en, .ch-en, .scene-slide, .ppl-latin, .thanks-en')) {
+    if (el.closest && el.closest('[dir="ltr"], [lang="en"]:not(#heroCardFa), .en, .boxin-en, .ch-en, .scene-slide, .ppl-latin, .thanks-en')) {
       return true;
     }
     return window.getComputedStyle(el).direction === "ltr";
@@ -130,6 +130,15 @@
     if (rec) {
       clearTimeout(rec.timer);
       tsActive.delete(el);
+      if (rec.kind === "hero" && rec.anims) {
+        for (var k = 0; k < rec.anims.length; k++) {
+          try { rec.anims[k].finish(); } catch (e) {}
+        }
+        rec.anims.length = 0;
+        if (!tsCountIn(document.getElementById("hero"))) {
+          root.classList.remove("hero-anim");
+        }
+      }
     }
     el.classList.remove("tw-play", "tw-soft", "tw-wipe-rtl", "tw-wipe-ltr");
     el.style.removeProperty("--tw-dur");
@@ -1092,48 +1101,141 @@
     if (el) { e.preventDefault(); goTo(stops[next]); }
   });
 
-  /* ---------------------------------------------------------------- synchronous pre-tokenization & hero directional reveal
-     Pre-tokenize deck & portal prose synchronously BEFORE `layoutRail()` so
-     document height, ScrollTrigger pins, and rail anchors stay 0.00px invariant
-     for the entire lifetime of the session. In #hero, `#heroCardFa` streams
-     Right -> Left while `#heroCardEn` streams simultaneously Left -> Right. */
+  /* ---------------------------------------------------------------- synchronous pre-tokenization & hero opening velvet reveal
+     1. Pre-tokenize deck & portal prose synchronously BEFORE `layoutRail()` so
+        document height, ScrollTrigger pins, and rail anchors stay 0.00px invariant
+        for the entire lifetime of the session.
+     2. Restore & elevate the signature smooth velvet hero entrance across ALL
+        opening `#hero` elements (`.basmala`, `.hero-course`, `#heroCardFa`,
+        `#heroCardEn`, and `#hero .presenters`):
+          - Staggered card rise (`#heroCardFa` at 0.24s, `#heroCardEn` at 0.37s,
+            0.90s silk cubic-bezier) + centered rule draw + presenters & actions glide
+          - Bidi-safe word-by-word velvet blur-dissolve + gentle rise + inline-start
+            directional drift (`RTL` right->left in Persian, `LTR` left->right in
+            English), releasing `will-change` cleanly to `auto` on completion. */
   document.querySelectorAll(
-    "#hero .presenters, .portal-sub, .scene .scene-kicker, .scene .boxin-fa, .scene .boxin-en, .scene .fnbar, #closing .presenters"
+    ".portal-sub, .scene .scene-kicker, .scene .boxin-fa, .scene .boxin-en, .scene .fnbar, #closing .presenters"
   ).forEach(tsPrepare);
 
-  if (!reduced()) {
-    var basmalaEl = document.querySelector("#hero .basmala");
-    var courseEl = document.querySelector("#hero .hero-course");
-    var heroPresEl = document.querySelector("#hero .presenters");
-    if (basmalaEl) tsWipe(basmalaEl, { delay: 30, duration: 500 });
-    if (courseEl) tsWipe(courseEl, { delay: 95, duration: 480 });
-    ["#heroCardFa", "#heroCardEn"].forEach(function (sel) {
-      var cardWords = [];
-      document.querySelectorAll(sel + " .hc-1, " + sel + " .hc-2, " + sel + " .hc-3").forEach(function (el) {
-        var raw = el.textContent;
-        el.textContent = "";
-        raw.trim().split(/\s+/).forEach(function (wd, i) {
-          if (i) el.appendChild(document.createTextNode(" "));
-          var s = document.createElement("span");
-          s.className = "w";
-          s.textContent = wd;
-          el.appendChild(s);
-          cardWords.push(s);
-        });
-      });
-      cardWords.forEach(function (w, i) {
-        if (!w.animate) return;
-        var wa = w.animate([
-          { opacity: 0 },
-          { opacity: 1 }
-        ], { duration: 360, delay: 260 + i * 30, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "backwards" });
-        if (document.timeline && typeof document.timeline.currentTime === "number") {
-          try { wa.startTime = document.timeline.currentTime; } catch (e) {}
-        }
-      });
-    });
-    if (heroPresEl) tsStream(heroPresEl, { delay: 380, window: 420, duration: 300, soft: true });
+  var heroWaAnims = [];
+  var heroMeta = { groups: 0, words: 0 };
+
+  function finishHeroAnims() {
+    var heroEl = document.getElementById("hero");
+    if (heroEl) tsCancelIn(heroEl);
+    root.classList.remove("hero-anim");
+    for (var i = 0; i < heroWaAnims.length; i++) {
+      try { heroWaAnims[i].finish(); } catch (e) {}
+    }
+    heroWaAnims.length = 0;
   }
+
+  function heroSplitWords(el) {
+    if (!el) return [];
+    var raw = el.textContent || "";
+    var tokens = raw.trim().split(/\s+/).filter(Boolean);
+    if (!tokens.length) return [];
+    var containerLtr = tsIsLtr(el);
+    el.textContent = "";
+    var out = [];
+    var ltrRun = null;
+    for (var i = 0; i < tokens.length; i++) {
+      var wd = tokens[i];
+      var isLatinWord = !containerLtr && /[A-Za-z0-9]/.test(wd) && !/[\u0600-\u06FF]/.test(wd);
+      var s = document.createElement("span");
+      s.className = "w";
+      s.textContent = wd;
+      if (isLatinWord) {
+        if (!ltrRun) {
+          if (i) el.appendChild(document.createTextNode(" "));
+          ltrRun = document.createElement("span");
+          ltrRun.className = "hero-ltr-run";
+          ltrRun.setAttribute("dir", "ltr");
+          el.appendChild(ltrRun);
+        } else {
+          ltrRun.appendChild(document.createTextNode(" "));
+        }
+        ltrRun.appendChild(s);
+      } else {
+        ltrRun = null;
+        if (i) el.appendChild(document.createTextNode(" "));
+        el.appendChild(s);
+      }
+      out.push(s);
+    }
+    return out;
+  }
+
+  function heroPlayGroup(anchorEl, selectors, startDelay, step, dur) {
+    var words = [];
+    document.querySelectorAll(selectors).forEach(function (el) {
+      var ws = heroSplitWords(el);
+      for (var i = 0; i < ws.length; i++) words.push(ws[i]);
+    });
+    if (!words.length || !anchorEl) return;
+    heroMeta.groups++;
+    heroMeta.words += words.length;
+    tsBlockCount++;
+    tsWordCount += words.length;
+    var groupAnims = [];
+    words.forEach(function (w, i) {
+      if (!w.animate) return;
+      var isWordLtr = tsIsLtr(w);
+      var dx = isWordLtr ? "-0.2em" : "0.2em";
+      var dxMid = isWordLtr ? "-0.06em" : "0.06em";
+      var wa = w.animate([
+        { opacity: 0, transform: "translate3d(" + dx + ", 0.5em, 0) scale(0.94)", filter: "blur(7.5px)" },
+        { opacity: 0.64, transform: "translate3d(" + dxMid + ", 0.14em, 0) scale(0.985)", filter: "blur(2.2px)", offset: 0.42 },
+        { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", filter: "blur(0px)" }
+      ], {
+        duration: dur,
+        delay: startDelay + i * step,
+        easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+        fill: "backwards"
+      });
+      if (document.timeline && typeof document.timeline.currentTime === "number") {
+        try { wa.startTime = document.timeline.currentTime; } catch (e) {}
+      }
+      groupAnims.push(wa);
+      heroWaAnims.push(wa);
+    });
+    var totalMs = Math.ceil(startDelay + Math.max(0, words.length - 1) * step + dur + 36);
+    var timer = setTimeout(function () {
+      tsActive.delete(anchorEl);
+      tsCompleted++;
+      if (!tsCountIn(document.getElementById("hero"))) {
+        root.classList.remove("hero-anim");
+        heroWaAnims.length = 0;
+      }
+    }, totalMs);
+    tsActive.set(anchorEl, { timer: timer, kind: "hero", dir: tsIsLtr(anchorEl) ? "ltr" : "rtl", anims: groupAnims });
+  }
+
+  if (!reduced()) {
+    root.classList.add("hero-anim");
+    heroPlayGroup(document.querySelector("#hero .basmala"), "#hero .basmala", 35, 58, 820);
+    heroPlayGroup(document.querySelector("#hero .hero-course"), "#hero .hero-course", 160, 48, 800);
+    heroPlayGroup(document.getElementById("heroCardFa"), "#heroCardFa .hc-1, #heroCardFa .hc-2, #heroCardFa .hc-3", 210, 56, 840);
+    heroPlayGroup(document.getElementById("heroCardEn"), "#heroCardEn .hc-1, #heroCardEn .hc-2, #heroCardEn .hc-3", 410, 52, 840);
+    heroPlayGroup(document.querySelector("#hero .presenters"), "#hero .presenters", 580, 52, 800);
+  }
+
+  window.addEventListener("beforeprint", finishHeroAnims);
+  if (reducedMQ.addEventListener) {
+    reducedMQ.addEventListener("change", function (e) { if (e.matches) finishHeroAnims(); });
+  }
+
+  window.__heroMotion = {
+    stats: function () {
+      return {
+        groups: heroMeta.groups,
+        words: heroMeta.words,
+        animating: root.classList.contains("hero-anim"),
+        active: heroWaAnims.filter(function (a) { return a.playState === "running"; }).length
+      };
+    },
+    finish: finishHeroAnims
+  };
 
   /* ---------------------------------------------------------------- chapter range count-up */
   document.querySelectorAll(".ch-range").forEach(function (el) {
@@ -1179,28 +1281,48 @@
     });
   }
 
-  /* ---------------------------------------------------------------- Motion: hero flourish only */
+  /* ---------------------------------------------------------------- Motion: hero flourish & parallax */
   function motionInit() {
-    var M = window.Motion;
-    if (!M || !M.animate) return;
-    var animate = M.animate, scroll = M.scroll, EASE = [0.22, 1, 0.36, 1];
     var hero = document.getElementById("hero");
     var cardFa = document.getElementById("heroCardFa");
     var cardEn = document.getElementById("heroCardEn");
-    animate(".basmala", { opacity: [0, 1], y: [12, 0] }, { duration: 0.72, ease: EASE });
-    animate("#heroRule", { scaleX: [0, 1] }, { duration: 0.9, ease: EASE, delay: 0.1 });
-    animate([cardFa, cardEn], { opacity: [0.14, 1], y: [22, 0] }, { duration: 0.62, ease: EASE, delay: 0.14 });
-    animate("#hero .presenters", { opacity: [0, 1], y: [16, 0] }, { duration: 0.72, ease: EASE, delay: 0.42 });
-    animate("#hero .hero-actions", { opacity: [0, 1], y: [14, 0] }, { duration: 0.72, ease: EASE, delay: 0.56 });
-    animate("#scrollCue svg", { y: [0, 7, 0] }, { duration: 1.9, repeat: Infinity, ease: "easeInOut" });
-    if (hero && scroll && cardFa && cardEn) {
-      scroll(function (info) {
-        var p = info && info.y && typeof info.y.progress === "number" ? info.y.progress : null;
-        if (p === null) return;
-        cardFa.style.transform = "translateY(" + (-26 * p) + "px)";
-        cardEn.style.transform = "translateY(" + (-48 * p) + "px)";
-      }, { target: hero, offset: ["start start", "end start"] });
+    var basmala = document.querySelector("#hero .basmala");
+    var rule = document.getElementById("heroRule");
+    var pres = document.querySelector("#hero .presenters");
+    var actions = document.querySelector("#hero .hero-actions");
+    var cueSvg = document.querySelector("#scrollCue svg");
+    var EASE = [0.22, 1, 0.36, 1];
+    var M = window.Motion;
+    if (M && M.animate) {
+      var animate = M.animate, scroll = M.scroll;
+      if (basmala) animate(basmala, { opacity: [0, 1], y: [14, 0] }, { duration: 0.9, ease: EASE });
+      if (rule) animate(rule, { scaleX: [0, 1] }, { duration: 1.05, ease: EASE, delay: 0.1 });
+      if (cardFa) animate(cardFa, { opacity: [0, 1], y: [32, 0], scale: [0.985, 1] }, { duration: 0.95, ease: EASE, delay: 0.11 });
+      if (cardEn) animate(cardEn, { opacity: [0, 1], y: [32, 0], scale: [0.985, 1] }, { duration: 0.95, ease: EASE, delay: 0.27 });
+      if (pres) animate(pres, { opacity: [0, 1], y: [18, 0] }, { duration: 0.85, ease: EASE, delay: 0.52 });
+      if (actions) animate(actions, { opacity: [0, 1], y: [16, 0] }, { duration: 0.82, ease: EASE, delay: 0.68 });
+      if (cueSvg) animate(cueSvg, { y: [0, 7, 0] }, { duration: 1.9, repeat: Infinity, ease: "easeInOut" });
+      if (hero && scroll && cardFa && cardEn) {
+        scroll(function (info) {
+          var p = info && info.y && typeof info.y.progress === "number" ? info.y.progress : null;
+          if (p === null) return;
+          cardFa.style.transform = "translateY(" + (-26 * p) + "px)";
+          cardEn.style.transform = "translateY(" + (-48 * p) + "px)";
+        }, { target: hero, offset: ["start start", "end start"] });
+      }
+      return;
     }
+    /* Native Web Animations API fallback when Motion One is absent */
+    var bez = "cubic-bezier(0.22, 1, 0.36, 1)";
+    function wAnim(el, kf, dur, delay) {
+      if (el && el.animate) el.animate(kf, { duration: dur, delay: delay, easing: bez, fill: "backwards" });
+    }
+    wAnim(basmala, [{ opacity: 0, transform: "translateY(14px)" }, { opacity: 1, transform: "translateY(0)" }], 900, 0);
+    wAnim(rule, [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], 1050, 100);
+    wAnim(cardFa, [{ opacity: 0, transform: "translateY(32px) scale(0.985)" }, { opacity: 1, transform: "translateY(0) scale(1)" }], 950, 110);
+    wAnim(cardEn, [{ opacity: 0, transform: "translateY(32px) scale(0.985)" }, { opacity: 1, transform: "translateY(0) scale(1)" }], 950, 270);
+    wAnim(pres, [{ opacity: 0, transform: "translateY(18px)" }, { opacity: 1, transform: "translateY(0)" }], 850, 520);
+    wAnim(actions, [{ opacity: 0, transform: "translateY(16px)" }, { opacity: 1, transform: "translateY(0)" }], 820, 680);
   }
 
   /* ---------------------------------------------------------------- boot */
@@ -1358,27 +1480,19 @@
       var delay0 = baseDelay || 0;
       var proseItems = Array.prototype.slice.call(panel.querySelectorAll(".ppl-text > *"));
       proseItems.forEach(function (node, idx) {
-        runAnim(node, [
-          { opacity: 0.14, transform: "translate3d(" + dx + "px, 7px, 0)" },
-          { opacity: 1, transform: "translate3d(0, 0, 0)" }
-        ], { duration: 330, delay: delay0 + Math.min(idx, 3) * 26, easing: EASE_OUT, fill: "backwards" });
         tsStream(node, {
           delay: delay0 + Math.min(idx, 3) * 44,
           window: 400,
           duration: 260
         });
+        runAnim(node, [
+          { opacity: 0.14, transform: "translate3d(" + dx + "px, 7px, 0)" },
+          { opacity: 1, transform: "translate3d(0, 0, 0)" }
+        ], { duration: 380, delay: delay0 + Math.min(idx, 3) * 26, easing: EASE_OUT, fill: "backwards" });
       });
       var facts = panel.querySelector(".ppl-facts");
       if (facts) {
-        runAnim(facts, [
-          { opacity: 0.16, transform: "translate3d(" + (dx * 0.6).toFixed(1) + "px, 8px, 0)" },
-          { opacity: 1, transform: "translate3d(0, 0, 0)" }
-        ], { duration: 340, delay: delay0 + 25, easing: EASE_OUT, fill: "backwards" });
         Array.prototype.forEach.call(facts.querySelectorAll("li"), function (li, idx) {
-          runAnim(li, [
-            { opacity: 0.16, transform: "translateY(5px)" },
-            { opacity: 1, transform: "translateY(0)" }
-          ], { duration: 290, delay: delay0 + 40 + Math.min(idx, 4) * 22, easing: EASE_OUT, fill: "backwards" });
           var vEl = li.querySelector(".ppl-v");
           if (vEl) {
             tsStream(vEl, {
@@ -1387,7 +1501,15 @@
               duration: 240
             });
           }
+          runAnim(li, [
+            { opacity: 0.16, transform: "translateY(5px)" },
+            { opacity: 1, transform: "translateY(0)" }
+          ], { duration: 330, delay: delay0 + 40 + Math.min(idx, 4) * 22, easing: EASE_OUT, fill: "backwards" });
         });
+        runAnim(facts, [
+          { opacity: 0.16, transform: "translate3d(" + (dx * 0.6).toFixed(1) + "px, 8px, 0)" },
+          { opacity: 1, transform: "translate3d(0, 0, 0)" }
+        ], { duration: 370, delay: delay0 + 25, easing: EASE_OUT, fill: "backwards" });
       }
     }
 
