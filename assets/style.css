@@ -27,6 +27,11 @@
 :root[data-theme="light"] {
   color-scheme: light;
   --fs: 1;
+  /* Times New Roman, then the metric-compatible families a Linux desktop
+     ships instead of it (Liberation Serif, URW Nimbus Roman, Tinos —
+     the face the PDF embeds), so the English text never falls through
+     to a wide DejaVu Serif */
+  --font-en: "Times New Roman", Times, "Liberation Serif", "Nimbus Roman", Tinos, serif;
   --bg: #F7F5EF;
   --panel: #FCFAF3;
   --card: #FDFBF5;
@@ -259,7 +264,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
 .tb-btn {
   height: 44px; min-width: 44px; padding: 0 10px; border-radius: 999px;
   border: 1.5px solid var(--sage); background: var(--panel); color: var(--sage-strong);
-  font-family: "Times New Roman", Times, serif; font-weight: 700; font-size: 14px;
+  font-family: var(--font-en); font-weight: 700; font-size: 14px;
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
   transition: background-color 0.3s ease, color 0.3s ease, opacity 0.3s ease;
 }
@@ -377,7 +382,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
 .hero-card .hc-1 { font-weight: 700; font-size: clamp(24px, 3.6vw, 33px); line-height: 1.25; text-wrap: balance; }
 .hero-card .hc-2 { font-weight: 700; font-size: clamp(19px, 2.8vw, 26px); line-height: 1.4; margin-top: 4px; text-wrap: balance; }
 .hero-card .hc-3 { color: var(--on-surface-soft); font-size: clamp(16px, 2.4vw, 20px); margin-top: 16px; font-weight: 700; text-wrap: balance; }
-.hero-card.en { font-family: "Times New Roman", Times, serif; direction: ltr; text-align: left; }
+.hero-card.en { font-family: var(--font-en); direction: ltr; text-align: left; }
 .hero-card.en .hc-1 { font-size: clamp(22px, 3.2vw, 29px); }
 .hero-card.en .hc-2 { font-size: clamp(17px, 2.5vw, 23px); }
 .hero-card.en .hc-3 { font-size: clamp(15px, 2.2vw, 18px); }
@@ -398,7 +403,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
 }
 .btn-pdf:hover { transform: translateY(-2px); }
 .btn-pdf .bp-fa { font-weight: 700; font-size: 20px; line-height: 1; }
-.btn-pdf .bp-en { font-family: "Times New Roman", Times, serif; font-size: 13px; opacity: 0.85; line-height: 1; }
+.btn-pdf .bp-en { font-family: var(--font-en); font-size: 13px; opacity: 0.85; line-height: 1; }
 .btn-pdf svg { width: 21px; height: 21px; flex-shrink: 0; }
 .scroll-cue {
   display: inline-flex; flex-direction: column; align-items: center; gap: 2px;
@@ -407,7 +412,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
 .scroll-cue svg { width: 20px; height: 20px; color: var(--sage); }
 .kbd-hint { color: var(--ink-soft); font-size: 13px; font-weight: 700; text-align: center; }
 .kbd-hint kbd {
-  font-family: "Times New Roman", Times, serif; font-size: 12px;
+  font-family: var(--font-en); font-size: 12px;
   border: 1px solid var(--line); border-bottom-width: 2px; background: var(--panel);
   border-radius: 6px; padding: 0 6px; margin: 0 1px;
 }
@@ -561,10 +566,10 @@ body.tab-hidden .blob { animation-play-state: paused; }
   color: var(--sage-strong); font-weight: 700; font-size: clamp(15px, 2.4vw, 18px);
   display: flex; align-items: center; justify-content: center; gap: 14px;
 }
-.ch-kicker .en { font-family: "Times New Roman", Times, serif; font-size: 0.92em; }
+.ch-kicker .en { font-family: var(--font-en); font-size: 0.92em; }
 .chapter h2 { margin: 14px 0 0; font-size: clamp(30px, 5.4vw, 46px); font-weight: 700; line-height: 1.35; color: var(--ink); text-wrap: balance; }
 .chapter .ch-en {
-  font-family: "Times New Roman", Times, serif; direction: ltr;
+  font-family: var(--font-en); direction: ltr;
   font-size: clamp(17px, 2.8vw, 23px); color: var(--ink-soft); margin-top: 8px; font-weight: 700;
   text-wrap: balance;
 }
@@ -587,7 +592,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
 }
 .scene.on .scene-num { background: var(--sage); color: var(--pill-ink); }
 .scene-kicker { font-weight: 700; font-size: clamp(16px, 2.6vw, 19px); color: var(--ink); line-height: 1.4; }
-.scene-slide { font-family: "Times New Roman", Times, serif; direction: ltr; text-align: right; color: var(--ink-soft); font-size: 13.5px; margin-top: 1px; }
+.scene-slide { font-family: var(--font-en); direction: ltr; text-align: right; color: var(--ink-soft); font-size: 13.5px; margin-top: 1px; }
 
 .illus {
   margin: 0 0 26px; background: var(--panel); border: 1.5px solid var(--line); border-radius: 18px;
@@ -610,7 +615,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
 .s-beige { stroke: var(--beige); }
 .s-ink { stroke: var(--ink); }
 .tx { fill: var(--ink); font-family: "B Nazanin", Tahoma, sans-serif; font-weight: 700; }
-.tx-en { fill: var(--ink); font-family: "Times New Roman", Times, serif; font-weight: 700; }
+.tx-en { fill: var(--ink); font-family: var(--font-en); font-weight: 700; }
 .tx-sage { fill: var(--sage-strong); font-family: "B Nazanin", Tahoma, sans-serif; font-weight: 700; }
 
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(16px, 2.6vw, 28px); align-items: start; }
@@ -620,7 +625,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
   transition: background-color 0.5s ease;
 }
 .pill-fa { font-size: 18px; text-align: right; }
-.pill-en { font-family: "Times New Roman", Times, serif; font-size: 16.5px; text-align: left; }
+.pill-en { font-family: var(--font-en); font-size: 16.5px; text-align: left; }
 .card {
   background: var(--card); border: 1.5px solid var(--line); border-radius: 18px;
   padding: clamp(18px, 2.6vw, 28px); box-shadow: var(--shadow);
@@ -630,7 +635,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
 .boxin p { margin: 0 0 10px; }
 .boxin p:last-child { margin-bottom: 0; }
 .boxin-fa { font-family: "B Nazanin", Tahoma, sans-serif; font-size: calc(20px * var(--fs)); line-height: 1.95; }
-.boxin-en { font-family: "Times New Roman", Times, serif; font-size: calc(17.5px * var(--fs)); line-height: 1.55; direction: ltr; text-align: justify; }
+.boxin-en { font-family: var(--font-en); font-size: calc(17.5px * var(--fs)); line-height: 1.55; direction: ltr; text-align: justify; }
 .boxin .head { font-weight: 700; color: var(--sage-strong); margin-bottom: 12px; }
 .boxin-fa .head { font-size: calc(25px * var(--fs)); text-align: right; line-height: 1.5; }
 .boxin-en .head { font-size: calc(22px * var(--fs)); text-align: left; line-height: 1.3; }
@@ -641,7 +646,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
   padding: 12px 20px; text-align: center; color: var(--ink); line-height: 1.6;
   transition: background-color 0.5s ease;
 }
-.fnbar .fn-en { font-family: "Times New Roman", Times, serif; font-size: calc(14.5px * var(--fs)); }
+.fnbar .fn-en { font-family: var(--font-en); font-size: calc(14.5px * var(--fs)); }
 .fnbar .fn-fa { font-family: "B Nazanin", Tahoma, sans-serif; font-size: calc(15.5px * var(--fs)); }
 .fnbar .fn-sm { font-size: calc(13px * var(--fs)); }
 .fnbar .fn-xs { font-size: calc(12px * var(--fs)); }
@@ -983,7 +988,7 @@ html.ppl-lock { overflow: hidden; }
 .ppl-pinfo { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .ppl-pname { font-size: calc(18.5px * var(--fs)); font-weight: 700; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ppl-platin {
-  font-family: "Times New Roman", Times, serif; direction: ltr; unicode-bidi: isolate; text-align: right;
+  font-family: var(--font-en); direction: ltr; unicode-bidi: isolate; text-align: right;
   font-size: calc(12.5px * var(--fs)); color: var(--ink-soft); letter-spacing: .2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
@@ -1007,7 +1012,7 @@ html.ppl-lock { overflow: hidden; }
 .ppl-idtx { min-width: 0; }
 .ppl-name { font-size: clamp(21px, 2.7vw, 27px); line-height: 1.35; font-weight: 700; color: var(--ink); }
 .ppl-latin {
-  margin-top: 2px; font-family: "Times New Roman", Times, serif; direction: ltr; unicode-bidi: isolate; text-align: right;
+  margin-top: 2px; font-family: var(--font-en); direction: ltr; unicode-bidi: isolate; text-align: right;
   font-size: calc(13.5px * var(--fs)); color: var(--ink-soft); letter-spacing: .3px;
 }
 .ppl-tag { margin-top: 7px; font-size: calc(15.5px * var(--fs)); line-height: 1.75; color: var(--sage-strong); }
@@ -1287,14 +1292,14 @@ html.ppl-lock { overflow: hidden; }
   display: flex; flex-direction: column; justify-content: center; gap: 6px;
 }
 .zpd-title {
-  margin: 0; font-family: "Times New Roman", Times, serif; font-weight: 700;
+  margin: 0; font-family: var(--font-en); font-weight: 700;
   font-size: clamp(14.5px, 1.55vw, 17.5px); line-height: 1.25; color: var(--zpd-title);
 }
 .zpd-box[lang="fa"] .zpd-title { font-family: "B Nazanin", Tahoma, sans-serif; font-size: clamp(17px, 1.8vw, 20px); }
 .zpd-sup { font-size: 0.62em; }
 .zpd-desc {
   margin: 0; color: var(--zpd-oncard);
-  font-family: "Times New Roman", Times, serif;
+  font-family: var(--font-en);
   font-size: clamp(12px, 1.15vw, 13.5px); line-height: 1.45;
 }
 .zpd-box[lang="fa"] .zpd-desc { font-family: "B Nazanin", Tahoma, sans-serif; font-size: clamp(14px, 1.4vw, 16px); line-height: 1.7; }
@@ -1321,7 +1326,7 @@ html.ppl-lock { overflow: hidden; }
   clip-path: polygon(0 26%, calc(100% - 40px) 26%, calc(100% - 40px) 0, 100% 50%, calc(100% - 40px) 100%, calc(100% - 40px) 74%, 0 74%);
   display: flex; align-items: center; justify-content: center;
   font-weight: 700; color: var(--zpd-arrow-ink);
-  font-family: "Times New Roman", Times, serif;
+  font-family: var(--font-en);
   font-size: clamp(12.5px, 1.2vw, 15px);
 }
 .zpd-box[lang="fa"] .zpd-arrow {
@@ -1329,7 +1334,7 @@ html.ppl-lock { overflow: hidden; }
   font-family: "B Nazanin", Tahoma, sans-serif; font-size: clamp(14px, 1.4vw, 17px);
 }
 .zpd-cap { text-align: center; font-weight: 700; color: var(--sage-strong); margin-top: 10px; font-size: 16.5px; }
-.zpd-cap.en { font-family: "Times New Roman", Times, serif; font-size: 14.5px; direction: ltr; }
+.zpd-cap.en { font-family: var(--font-en); font-size: 14.5px; direction: ltr; }
 
 /* ---------------------------------------------------------------- 11 closing */
 /* #closing lives outside <main> (after the dossier view in the
@@ -1348,7 +1353,7 @@ html.ppl-lock { overflow: hidden; }
 }
 :root[data-theme="dark"] .thanks-card { background: var(--surface); }
 .thanks-fa { font-size: clamp(30px, 6vw, 44px); font-weight: 700; }
-.thanks-en { font-family: "Times New Roman", Times, serif; direction: ltr; color: var(--on-surface-soft); font-size: clamp(16px, 3vw, 20px); margin-top: 10px; }
+.thanks-en { font-family: var(--font-en); direction: ltr; color: var(--on-surface-soft); font-size: clamp(16px, 3vw, 20px); margin-top: 10px; }
 #closing .presenters { max-width: 760px; margin-left: auto; margin-right: auto; }
 #closing .btn-pdf { margin-top: 30px; }
 .colophon { margin-top: 44px; color: var(--ink-soft); font-size: 14.5px; font-weight: 700; }
@@ -1508,17 +1513,24 @@ html.ppl-lock { overflow: hidden; }
   .kbd-hint { display: none; }
 }
 
-/* short laptops get the compact (chapter-only) rail — same rule as the
-   JS compactRail() so DOM order, layout and CSS agree */
-@media (max-height: 799px) and (min-width: 901px) {
-  #rail { height: 88vh; --rail-pad: 12px; }
-  #rail { height: 88svh; --rail-pad: 12px; }
-  #rail a.s-dot { display: none; }
-}
 /* `top: 50%` cannot see the fixed top bar: every hero-era dot used to be
    clipped behind it. Push the rail below the bar on short viewports. */
 @media (max-height: 799px) {
   #rail { top: calc(50% + 18px); }
+}
+/* Short laptops (600–849px tall at desktop width — 1366×768, or 1080p at
+   150 % scaling, the usual Linux/Windows laptop) keep every slide
+   station: the track spans from 13px under the 65px top bar to 14px
+   above the bottom edge, and the dots sit at a 14–20px pitch. The JS
+   compactRail() threshold (RAIL_MIN_FULL_H = 600) matches the
+   chapter-only rule below so DOM order, layout and CSS agree. */
+@media (max-height: 849px) and (min-width: 901px) {
+  #rail { top: calc(50% + 32px); height: calc(100vh - 92px); --rail-pad: 12px; }
+  #rail { height: calc(100svh - 92px); }
+}
+/* genuinely short desktop windows get the chapter-only rail */
+@media (max-height: 599px) and (min-width: 901px) {
+  #rail a.s-dot { display: none; }
 }
 
 /* short desktop viewports (laptops at 768–900px): the hero has to fit
