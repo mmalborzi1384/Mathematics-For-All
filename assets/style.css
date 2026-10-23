@@ -589,6 +589,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
 .portal-kicker {
   display: inline-flex; align-items: center; gap: 9px;
   font-size: calc(14.5px * var(--fs)); font-weight: 700; color: var(--sage-strong);
+  transition: color .5s ease;
 }
 .portal-kicker::before {
   content: ""; width: 22px; height: 2px; border-radius: 2px; background: var(--sage);
@@ -596,10 +597,12 @@ body.tab-hidden .blob { animation-play-state: paused; }
 .portal-h2 {
   margin: 9px 0 0; color: var(--ink);
   font-size: clamp(23px, 3.4vw, 35px); line-height: 1.32; font-weight: 700;
+  transition: color .5s ease;
 }
 .portal-sub {
   margin-top: 9px; color: var(--ink-soft); max-width: 54ch;
   font-size: calc(16.5px * var(--fs)); line-height: 1.9; text-align: justify;
+  transition: color .5s ease;
 }
 .portal-cta {
   display: inline-flex; align-items: center; gap: 10px;
@@ -710,6 +713,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
 }
 #people.is-mounted { display: block; }
 #people.is-open { clip-path: circle(var(--ppl-r, 160vmax) at var(--ppl-ox, 50%) var(--ppl-oy, 42%)); }
+#people.is-settled { clip-path: none !important; transition: none !important; }
 
 .ppl-sheet {
   position: absolute; inset: 0;
@@ -721,7 +725,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
 .ppl-sheet .wrap { padding-bottom: calc(34px + env(safe-area-inset-bottom, 0px)); }
 /* air under the bar, not above it: the bar has to own the very top edge,
    or the content scrolls through a 16px slit over it */
-.ppl-sheet .ppl-head { padding-top: clamp(12px, 2.6vh, 26px); }
+.ppl-sheet .ppl-head { padding-top: clamp(12px, 2.6vh, 26px); padding-top: clamp(12px, 2.6svh, 26px); }
 .ppl-sheet:focus, .ppl-sheet:focus-visible { outline: none; }
 
 /* the view's own bar: back out, and the name of the thing you are in */
@@ -1428,96 +1432,621 @@ html.ppl-lock, html.ppl-lock body { overflow: hidden; }
   .hl-sage, .hl-olive, .hl-gold, .hl-tan, .hl-rust, .hl-plum, .hl-brown { color: #1a1a1a !important; }
 }
 
-/* Chapter prelude — reuses the dossier's visual language, not its state. */
-#summaryPortal { padding: clamp(32px, 6svh, 72px) 0; position: relative; z-index: 1; }
-.summary-art { animation: summaryFloat 7s ease-in-out infinite; }
-@keyframes summaryFloat { 50% { transform: translateY(-7px) rotate(-2deg); } }
-.summary-content { position: relative; z-index: 1; background: var(--bg); color: var(--ink); }
-.summary-wrap { width: min(880px, calc(100% - 40px)); margin-inline: auto; padding-block: 32px 60px; }
-.summary-head { margin-bottom: 32px; }
-.summary-head h2 { font-size: clamp(30px, 5vw, 46px); line-height: 1.5; margin: 12px 0; }
-.summary-head h3 { font-size: clamp(23px, 3vw, 29px); line-height: 1.8; margin-block: 24px 12px; }
-.summary-head p, .summary-card { font-size: calc(clamp(21px, 2vw, 24px) * var(--fs)); line-height: 1.95; }
-.summary-head p, .summary-card p, .summary-card li { text-align: justify; overflow-wrap: break-word; }
-.summary-card { background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: clamp(20px, 4vw, 36px); margin-block: 22px; box-shadow: var(--shadow); }
-.summary-card h3 { margin: 0 0 16px; font-size: 1.18em; line-height: 1.6; }
-.summary-card p { margin-block: 14px; }
-.summary-card ul, .summary-card ol { padding-inline-start: 25px; }
-.summary-card li + li { margin-top: 12px; }
-.summary-number { display: block; color: var(--sage-strong); font-size: .85em; margin-bottom: 8px; }
-.summary-keywords { border-top: 1px solid var(--line); padding-top: 16px; }
-.summary-dialog { inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: var(--bg); color: var(--ink); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; clip-path: circle(0px at var(--summary-ox, 50%) var(--summary-oy, 42%)); transition: clip-path .72s cubic-bezier(.62,.01,.2,1); }
-.summary-dialog.is-open { clip-path: circle(var(--summary-radius, 160vmax) at var(--summary-ox, 50%) var(--summary-oy, 42%)); }
-.summary-dialog::backdrop { background: transparent; }
-.summary-bar { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line); padding: max(12px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)); display: flex; justify-content: flex-start; }
-.summary-finish { margin-top: 12px; }
-html.summary-lock, html.summary-lock body { overflow: hidden; }
-#summaryTitle:focus { outline: none; }
-@media (max-width: 560px) { .summary-wrap { width: calc(100% - 28px); } .summary-card { border-radius: 20px; } }
-@media (prefers-reduced-motion: reduce) { .summary-art { animation: none; } .summary-dialog { transition: none; } }
-@media print { #summaryPortal, .summary-bar, .summary-finish { display: none !important; } .summary-dialog { display: block !important; position: static !important; height: auto !important; overflow: visible !important; clip-path: none !important; } .summary-card { box-shadow: none; break-inside: avoid; } }
+/* =====================================================================
+   16 · Chapter Prelude ("از ابتدای فصل تا اینجا")
+   Sibling door & full-screen editorial room to #portal / #people:
+   - Two-layer scroll separation: outer <dialog.summary-dialog> is
+     overflow:hidden (wipe only) and drops clip-path once .is-settled;
+     inner .sum-sheet owns native touch/wheel scrolling.
+   - Full typography parity with .boxin-fa / .ppl-text (scales with --fs,
+     never stretches keywords/citations, zero invisible scroll cards).
+   ===================================================================== */
 
-/* Prelude polish: a bookplate outside, an editorial reading room inside. */
-#summaryPortal .portal-card { border-radius: 32px; }
+/* ---- Entry door on the main deck (#summaryPortal) ------------------- */
+#summaryPortal {
+  position: relative; z-index: 1;
+  padding: clamp(44px, 7vh, 88px) 0;
+  padding: clamp(44px, 7svh, 88px) 0;
+  border-bottom: 1px solid var(--line);
+  transition: border-color .5s ease;
+}
+#summaryPortal .portal-card { border-radius: 30px; }
 #summaryPortal .portal-side::before {
-  content: ""; position: absolute; inset: 21%; border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--sage) 12%, transparent), transparent 72%);
-  transition: transform .6s ease;
+  content: ""; position: absolute; inset: 18%; border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--sage) 14%, transparent), transparent 72%);
+  transition: transform .6s cubic-bezier(.22, 1, .36, 1), opacity .5s ease;
 }
-#summaryPortal .portal-card:hover .portal-side::before { transform: scale(1.4); }
-.summary-book { fill: color-mix(in srgb, var(--card) 88%, transparent); }
-.summary-book-lines { stroke-dasharray: 1; stroke-dashoffset: 0; }
-#summaryPortal .portal-card:is(:hover, :focus-visible) .summary-book-lines { animation: portalDraw 1s ease both; }
-.summary-spark { fill: var(--sage); transform-box: fill-box; transform-origin: center; animation: summaryTwinkle 4s ease-in-out infinite; }
-.summary-spark-small { animation-delay: -2s; fill: var(--beige); }
-@keyframes summaryTwinkle { 50% { opacity: .35; transform: scale(.65); } }
-.summary-seal { position: absolute; bottom: 7%; left: 50%; transform: translateX(-50%); font-size: 15px; color: var(--ink-soft); letter-spacing: .02em; white-space: nowrap; }
-.summary-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-block: 18px 4px; font-size: 16px; color: var(--ink-soft); }
-.summary-preview i { width: 4px; height: 4px; border-radius: 50%; background: var(--sage); opacity: .6; }
-#summaryPortal .portal-cta { gap: 20px; }
-.summary-dialog { background-image: radial-gradient(ellipse at 85% 4%, color-mix(in srgb, var(--sage) 7%, transparent), transparent 45%); }
-.summary-content { background: transparent; }
-.summary-bar { gap: 20px; align-items: center; justify-content: space-between; }
-.summary-status { color: var(--ink-soft); font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.summary-bar .ppl-back { flex-shrink: 0; }
-.summary-progress { position: absolute; bottom: -1px; inset-inline: 0; height: 3px; overflow: hidden; pointer-events: none; }
-.summary-progress::after { content: ""; display: block; width: 100%; height: 100%; background: var(--sage); transform: scaleX(var(--summary-progress, 0)); transform-origin: right; }
-.summary-head { padding: clamp(10px, 2vw, 24px) 0 8px; }
-.summary-head > .portal-kicker { font-size: 17px; }
-.summary-head > h3 { border-inline-start: 3px solid var(--sage); padding-inline-start: 20px; }
-.summary-head > p:last-of-type { color: var(--ink-soft); }
-.summary-index { display: flex; flex-wrap: wrap; gap: 9px; padding-top: 22px; margin-top: 28px; border-top: 1px solid var(--line); }
-.summary-index-title { flex-basis: 100%; margin: 0 0 4px; font-size: 17px; color: var(--ink-soft); }
-.summary-jump { display: inline-flex; align-items: center; gap: 9px; min-height: 44px; font: inherit; font-size: 17px; line-height: 1.6; padding: 8px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--ink); cursor: pointer; text-align: start; transition: background .25s ease, border-color .25s ease, transform .25s ease; }
-.summary-jump span { color: var(--sage-strong); font-size: 15px; }
-.summary-jump:hover { transform: translateY(-2px); border-color: var(--sage); }
-.summary-jump[aria-current="step"] { border-color: var(--sage); background: color-mix(in srgb, var(--sage) 13%, var(--card)); }
-.summary-jump:focus-visible { outline: 2px solid var(--sage); outline-offset: 3px; }
-.summary-card { position: relative; border-radius: 22px; padding-top: 28px; }
-.summary-number { display: inline-grid; place-items: center; min-width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--sage) 8%, var(--card)); font-size: 18px; margin-bottom: 18px; }
-.summary-card h3 { scroll-margin-top: 100px; }
+#summaryPortal .portal-card:hover .portal-side::before { transform: scale(1.32); }
+
+.summary-art { animation: summaryFloat 8s ease-in-out infinite; }
+@keyframes summaryFloat { 50% { transform: translateY(-5px); } }
+
+.summary-arc { stroke-width: 1.6; opacity: .6; stroke-dasharray: 1; stroke-dashoffset: 0; }
+.summary-book {
+  fill: color-mix(in srgb, var(--panel) 92%, transparent);
+  stroke-dasharray: 1; stroke-dashoffset: 0;
+}
+.summary-book-lines { stroke-dasharray: 1; stroke-dashoffset: 0; opacity: .88; }
+#summaryPortal .portal-card:is(:hover, :focus-visible) .summary-book-lines {
+  animation: portalDraw .95s cubic-bezier(.22, 1, .36, 1) both;
+}
+#summaryPortal .portal-card:is(:hover, :focus-visible) .summary-arc {
+  animation: portalDraw 1.2s cubic-bezier(.22, 1, .36, 1) both;
+}
+.summary-spark {
+  fill: var(--sage); transform-box: fill-box; transform-origin: center;
+  animation: summaryTwinkle 4.4s ease-in-out infinite;
+}
+.summary-spark-small { animation-delay: -2.2s; fill: var(--beige); }
+@keyframes summaryTwinkle { 50% { opacity: .32; transform: scale(.68); } }
+
+/* Floating orbital medallions on the prelude emblem (sibling to .pm-a/b/c) */
+.sm-a { left: 50%; top: 14.5%; animation-delay: -0.6s; }
+.sm-b { left: 84%; top: 68.5%; animation-delay: -3.1s; }
+.sm-c { left: 16%; top: 68.5%; animation-delay: -5.4s; font-size: calc(16px * var(--fs)); }
+#summaryPortal .portal-hub { top: 60%; }
+
+.summary-seal {
+  position: absolute; bottom: 4.5%; left: 50%; transform: translateX(-50%);
+  padding: 2px 10px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--line);
+  font-size: calc(12.5px * var(--fs)); font-weight: 700; color: var(--sage-strong);
+  letter-spacing: .01em; white-space: nowrap;
+  box-shadow: 0 8px 18px -14px rgba(55, 65, 81, .45);
+}
+
+.summary-preview {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 7px;
+  margin-top: 15px;
+  font-size: calc(14px * var(--fs)); font-weight: 700; color: var(--ink-soft);
+}
+.summary-preview span {
+  display: inline-flex; align-items: center;
+  padding: 4px 11px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--line);
+  transition: border-color .35s ease, background-color .35s ease, color .35s ease, transform .35s ease;
+}
+.summary-preview i {
+  width: 4px; height: 4px; border-radius: 50%; background: var(--sage); opacity: .55;
+}
+#summaryPortal .portal-card:hover .summary-preview span {
+  border-color: var(--sage-soft); color: var(--sage-strong); transform: translateY(-1px);
+}
+#summaryPortal .portal-card:hover .summary-preview span:nth-of-type(2) { transition-delay: 45ms; }
+#summaryPortal .portal-card:hover .summary-preview span:nth-of-type(3) { transition-delay: 90ms; }
+
+/* ---- Full-screen two-layer modal container -------------------------- */
+html.summary-lock { overflow: hidden; }
+
+.summary-dialog {
+  position: fixed; inset: 0;
+  width: 100%; height: 100%; max-width: none; max-height: none;
+  margin: 0; padding: 0; border: 0;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: var(--bg); color: var(--ink);
+  clip-path: circle(0px at var(--summary-ox, 50%) var(--summary-oy, 42%));
+  transition: clip-path .74s cubic-bezier(.62, .01, .2, 1);
+}
+.summary-dialog::backdrop {
+  background: var(--bg);
+  opacity: 0;
+}
+.summary-dialog.is-open {
+  clip-path: circle(var(--summary-radius, 160vmax) at var(--summary-ox, 50%) var(--summary-oy, 42%));
+}
+/* Critical stability guarantee: once the opening circle covers the viewport,
+   drop clip-path and turn ::backdrop opaque paper so touch/wheel scrolling
+   NEVER composites through a GPU clip mask or flashes the deck behind it. */
+.summary-dialog.is-settled {
+  clip-path: none !important;
+  transition: none !important;
+}
+.summary-dialog.is-settled::backdrop {
+  opacity: 1;
+}
+
+.sum-sheet {
+  position: absolute; inset: 0;
+  overflow-y: auto; overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(120% 74% at 50% 0%, var(--card), transparent 72%),
+    radial-gradient(circle at 1px 1px, rgba(102, 124, 103, 0.09) 1px, transparent 0);
+  background-size: 100% 100%, 28px 28px;
+  transition: background-color .5s ease, color .5s ease;
+}
+.sum-sheet:focus, .sum-sheet:focus-visible { outline: none; }
+
+/* Entrance choreography on first open only (all cards stay opacity:1 after) */
+.summary-dialog.is-entering .summary-bar {
+  animation: sumFadeDown .46s .06s both cubic-bezier(.22, 1, .36, 1);
+}
+.summary-dialog.is-entering .summary-head {
+  animation: sumRise .58s .14s both cubic-bezier(.22, 1, .36, 1);
+}
+.summary-dialog.is-entering .summary-card:nth-of-type(1) {
+  animation: sumRise .58s .22s both cubic-bezier(.22, 1, .36, 1);
+}
+.summary-dialog.is-entering .summary-card:nth-of-type(2) {
+  animation: sumRise .58s .29s both cubic-bezier(.22, 1, .36, 1);
+}
+@keyframes sumFadeDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes sumRise {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---- Sticky glass bar + quick-jump step pills + live progress ------- */
+.summary-bar {
+  position: sticky; top: 0; z-index: 6;
+  background: var(--bar-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+  padding: calc(10px + env(safe-area-inset-top, 0px)) clamp(14px, 4vw, 32px) 11px;
+  transition: background-color .5s ease, border-color .5s ease;
+}
+.sum-bar-inner {
+  max-width: 920px; margin-inline: auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+/* Override .ppl-back { order: 1 } so in RTL the back pill sits cleanly at inline-start (right) */
+.sum-back {
+  order: 0; flex-shrink: 0;
+}
+
+/* Center quick-step capsule (۱..۷ with spring-gliding ink indicator) */
+.sum-steps {
+  order: 1; position: relative;
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 4px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--line);
+  transition: background-color .5s ease, border-color .5s ease;
+}
+.sum-step-ink {
+  position: absolute; top: 0; left: 0; z-index: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sage) 20%, var(--card));
+  border: 1.5px solid var(--sage);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .06);
+  opacity: 0; pointer-events: none;
+  transition: transform .42s cubic-bezier(.22, 1, .36, 1),
+              width .42s cubic-bezier(.22, 1, .36, 1),
+              opacity .28s ease, background-color .5s ease, border-color .5s ease;
+}
+.sum-step {
+  position: relative; z-index: 1;
+  width: 30px; height: 28px; padding: 0; border: 0; border-radius: 999px;
+  background: none; color: var(--ink-soft);
+  font: inherit; font-size: calc(14px * var(--fs)); font-weight: 700;
+  display: grid; place-items: center; cursor: pointer;
+  transition: color .25s ease, transform .25s ease;
+}
+.sum-step:hover { color: var(--sage-strong); transform: translateY(-1px); }
+.sum-step.is-on { color: var(--sage-strong); }
+.sum-step:focus-visible { outline: 2px solid var(--sage); outline-offset: 2px; }
+
+.summary-status {
+  order: 2;
+  display: block; flex: 0 1 auto; min-width: 0; max-width: 260px;
+  padding: 6px 13px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--panel);
+  color: var(--sage-strong); font: inherit; font-weight: 700;
+  font-size: calc(13.5px * var(--fs)); line-height: 1.45;
+  text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums; cursor: pointer;
+  transition: border-color .3s ease, background-color .5s ease, color .5s ease;
+}
+.summary-status:hover { border-color: var(--sage); background: var(--beige-soft); }
+.summary-status:focus-visible { outline: 2px solid var(--sage); outline-offset: 2px; }
+
+.summary-progress {
+  position: absolute; bottom: -1px; inset-inline: 0; height: 3px;
+  overflow: hidden; pointer-events: none;
+}
+.summary-progress::after {
+  content: ""; display: block; width: 100%; height: 100%;
+  background: var(--sage);
+  transform: scaleX(var(--summary-progress, 0));
+  transform-origin: right center;
+}
+
+/* ---- Editorial column, masthead & archival citation slip ------------ */
+.summary-content { position: relative; z-index: 1; background: transparent; color: var(--ink); }
+.summary-wrap {
+  max-width: 920px; margin-inline: auto;
+  padding: clamp(22px, 3vw, 38px) clamp(16px, 4vw, 32px) calc(52px + env(safe-area-inset-bottom, 0px));
+}
+#summaryTitle:focus { outline: none; }
+
+.summary-head {
+  text-align: center;
+  margin-bottom: clamp(24px, 3.5vw, 34px);
+}
+.summary-head > .portal-kicker {
+  justify-content: center;
+  font-size: calc(15px * var(--fs));
+}
+.summary-head > .portal-kicker::after {
+  content: ""; width: 22px; height: 2px; border-radius: 2px; background: var(--sage);
+}
+.summary-head h2 {
+  margin: 12px 0 0; color: var(--ink);
+  font-size: clamp(27px, 4.4vw, 42px); line-height: 1.35; font-weight: 700;
+  transition: color .5s ease;
+}
+.summary-head > p {
+  margin: 10px auto 0; max-width: 58ch; color: var(--ink-soft);
+  font-size: calc(17px * var(--fs)); line-height: 1.9; text-align: center;
+  transition: color .5s ease;
+}
+
+/* Archival citation slip framing chapter title + authors */
+.sum-citation,
+.summary-head > h3 {
+  text-align: start;
+}
+.sum-citation {
+  position: relative; overflow: hidden;
+  margin-top: clamp(20px, 3vw, 28px);
+  padding: clamp(18px, 2.6vw, 26px) clamp(18px, 2.8vw, 28px);
+  background: var(--card);
+  border: 1.5px solid var(--line);
+  border-inline-start: 4px solid var(--sage);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  transition: background-color .5s ease, border-color .5s ease;
+}
+.sum-citation h3,
+.summary-head > h3 {
+  margin: 0; color: var(--ink);
+  font-size: calc(clamp(19px, 2.3vw, 23.5px) * var(--fs));
+  line-height: 1.78; font-weight: 700; text-align: start;
+}
+.sum-citation p {
+  margin: 12px 0 0; padding-top: 11px;
+  border-top: 1px dashed var(--line);
+  color: var(--ink-soft);
+  font-size: calc(15.5px * var(--fs)); line-height: 1.75; text-align: start;
+}
+.sum-citation p strong { color: var(--sage-strong); }
+
+/* 7-section route grid */
+.summary-index {
+  margin-top: clamp(20px, 3vw, 28px);
+  padding: clamp(16px, 2.2vw, 22px);
+  background: var(--panel);
+  border: 1.5px solid var(--line);
+  border-radius: 22px;
+  text-align: start;
+  transition: background-color .5s ease, border-color .5s ease;
+}
+.summary-index-title {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 0 13px;
+  font-size: calc(14.5px * var(--fs)); font-weight: 700; color: var(--sage-strong);
+  text-align: start;
+}
+.summary-index-title::after {
+  content: ""; flex: 1 1 auto; height: 1px; background: var(--line);
+}
+.sum-index-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(195px, 1fr));
+  gap: 8px;
+}
+.summary-jump {
+  display: flex; align-items: center; gap: 10px; min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line); border-radius: 14px;
+  background: var(--card); color: var(--ink);
+  font: inherit; font-size: calc(15.5px * var(--fs)); font-weight: 700; line-height: 1.45;
+  text-align: start; cursor: pointer;
+  transition: transform .28s cubic-bezier(.22, 1, .36, 1),
+              border-color .28s ease, background-color .28s ease, box-shadow .28s ease;
+}
+.sum-jump-num {
+  flex: 0 0 auto; width: 27px; height: 27px; border-radius: 9px;
+  display: grid; place-items: center;
+  background: var(--beige-soft); color: var(--sage-strong);
+  font-size: calc(14px * var(--fs)); font-weight: 700;
+  transition: background-color .28s ease, color .28s ease;
+}
+.sum-jump-tx { min-width: 0; }
+.summary-jump:hover {
+  transform: translateY(-2px);
+  border-color: var(--sage);
+  box-shadow: 0 10px 20px -16px rgba(55, 65, 81, .45);
+}
+.summary-jump[aria-current="step"] {
+  border-color: var(--sage);
+  background: color-mix(in srgb, var(--sage) 11%, var(--card));
+}
+.summary-jump[aria-current="step"] .sum-jump-num {
+  background: var(--surface); color: var(--on-surface);
+}
+.summary-jump:focus-visible { outline: 2px solid var(--sage); outline-offset: 2px; }
+
+/* ---- The 7 Chapter Prelude Cards ------------------------------------ */
+.summary-card {
+  position: relative; overflow: hidden;
+  background: var(--card);
+  border: 1.5px solid var(--line);
+  border-radius: 24px;
+  padding: clamp(20px, 3vw, 32px);
+  margin-block: 18px;
+  box-shadow: var(--shadow);
+  font-size: calc(20px * var(--fs));
+  line-height: 1.95;
+  transition: border-color .4s ease, background-color .5s ease, color .5s ease, box-shadow .4s ease;
+}
+/* Delicate watermark numeral via pure CSS attr() — adds zero DOM text */
+.summary-card::after {
+  content: attr(data-num);
+  position: absolute; inset-inline-end: 16px; top: -12px;
+  font-size: 98px; font-weight: 700; line-height: 1;
+  color: var(--sage); opacity: .055;
+  pointer-events: none; user-select: none;
+}
+.summary-card.is-current {
+  border-color: color-mix(in srgb, var(--sage) 62%, var(--line));
+}
+.summary-card.is-spotlight {
+  border-color: var(--sage);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sage) 22%, transparent), var(--shadow);
+}
+
+.sum-card-head {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; gap: 13px;
+  margin-bottom: 16px; padding-bottom: 13px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+}
+.summary-number {
+  flex: 0 0 auto; display: grid; place-items: center;
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 2px solid var(--sage);
+  background: var(--panel); color: var(--sage-strong);
+  font-size: calc(18px * var(--fs)); font-weight: 700; line-height: 1;
+  transition: background-color .35s ease, color .35s ease;
+}
+.summary-card.is-current .summary-number {
+  background: var(--sage); color: var(--pill-ink);
+}
+.summary-card h3 {
+  margin: 0; color: var(--ink);
+  font-size: calc(clamp(20px, 2.3vw, 24px) * var(--fs));
+  line-height: 1.45; font-weight: 700;
+  scroll-margin-top: 96px;
+}
 .summary-card h3:focus { outline: none; }
-.summary-card h3:focus-visible { outline: 2px solid var(--sage); outline-offset: 6px; border-radius: 4px; }
-.summary-dialog.has-reveals .summary-card { opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .7s cubic-bezier(.22,1,.36,1); }
-.summary-dialog.has-reveals .summary-card.is-read-visible,
-.summary-dialog.has-reveals .summary-card:focus-within { opacity: 1; transform: none; }
-.summary-dialog.is-open .summary-head { animation: summaryHeadIn .8s .12s both cubic-bezier(.22,1,.36,1); }
-@keyframes summaryHeadIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
-.summary-finish { width: 100%; min-height: 54px; justify-content: center; }
+.summary-card h3:focus-visible { outline: 2px solid var(--sage); outline-offset: 5px; border-radius: 4px; }
+
+/* Justify prose paragraphs & list items ONLY — never keywords or headings */
+.summary-card p {
+  position: relative; z-index: 1;
+  margin: 0 0 13px;
+  text-align: justify;
+  overflow-wrap: break-word;
+}
+.summary-card p:last-child { margin-bottom: 0; }
+
+.summary-card .summary-keywords {
+  margin-top: 16px; padding-top: 13px;
+  border-top: 1px dashed var(--line);
+  font-size: calc(16px * var(--fs)); line-height: 1.75;
+  color: var(--ink-soft);
+  text-align: start;
+}
+.summary-card .summary-keywords strong { color: var(--sage-strong); }
+
+/* Styled lists inside Cards 4 & 6 */
+.summary-card ul,
+.summary-card ol {
+  position: relative; z-index: 1;
+  margin: 14px 0; padding: 0;
+  list-style: none;
+  display: grid; gap: 10px;
+}
+.summary-card li {
+  position: relative;
+  padding: 12px 15px 12px 14px;
+  padding-inline-start: 38px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  font-size: calc(18.5px * var(--fs)); line-height: 1.88;
+  text-align: justify;
+  overflow-wrap: break-word;
+  transition: background-color .5s ease, border-color .35s ease;
+}
+.summary-card ul li::before {
+  content: ""; position: absolute; inset-inline-start: 16px; top: 1.12em;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--sage);
+}
+.summary-card ol { counter-reset: sumstep; }
+.summary-card ol li { counter-increment: sumstep; padding-inline-start: 46px; }
+.summary-card ol li::before {
+  content: counter(sumstep, persian);
+  position: absolute; inset-inline-start: 12px; top: 12px;
+  width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--beige-soft); color: var(--sage-strong);
+  font-size: calc(13.5px * var(--fs)); font-weight: 700; line-height: 1;
+}
+.summary-card li strong { color: var(--sage-strong); }
+
+/* ---- Editorial infographics (.sum-vis, aria-hidden) ----------------- */
+.sum-vis {
+  position: relative; z-index: 1;
+  margin: 16px 0;
+  padding: clamp(13px, 2vw, 18px);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  transition: background-color .5s ease, border-color .5s ease;
+}
+
+/* Historical arc (Card 1) */
+.sum-arc-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch; gap: 8px;
+}
+.sum-arc-node {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 11px 13px; border-radius: 12px;
+  background: var(--card); border: 1px solid var(--line);
+  transition: background-color .5s ease, border-color .5s ease;
+}
+.sum-arc-node.is-accent {
+  border-color: var(--sage-soft);
+  background: color-mix(in srgb, var(--sage) 9%, var(--card));
+}
+.sum-arc-era { font-size: calc(12px * var(--fs)); font-weight: 700; color: var(--sage-strong); }
+.sum-arc-node strong { font-size: calc(15px * var(--fs)); line-height: 1.45; color: var(--ink); }
+.sum-arc-node span:last-child { font-size: calc(13px * var(--fs)); line-height: 1.55; color: var(--ink-soft); }
+.sum-arc-arrow {
+  display: grid; place-items: center;
+  color: var(--sage); font-size: 18px; font-weight: 700;
+}
+
+/* Proportional bars (Cards 2 & 6) */
+.sum-meters { display: grid; gap: 12px; }
+.sum-meter-row { display: grid; gap: 6px; }
+.sum-meter-top {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  font-size: calc(14.5px * var(--fs)); line-height: 1.5; color: var(--ink);
+}
+.sum-meter-top b {
+  flex: 0 0 auto; font-size: calc(16px * var(--fs)); color: var(--sage-strong);
+  font-variant-numeric: tabular-nums;
+}
+.sum-meter-row.is-rust .sum-meter-top b { color: var(--hl-rust); }
+.sum-meter-row.is-muted .sum-meter-top b { color: var(--ink-soft); }
+.sum-meter-track {
+  height: 9px; border-radius: 999px; overflow: hidden;
+  background: color-mix(in srgb, var(--beige) 42%, transparent);
+}
+.sum-meter-track i {
+  display: block; height: 100%; width: 100%; border-radius: 999px;
+  background: var(--sage);
+  transform: scaleX(var(--w, 0.5));
+  transform-origin: right center;
+  transition: transform .7s cubic-bezier(.22, 1, .36, 1);
+}
+.sum-meter-row.is-rust .sum-meter-track i { background: var(--hl-rust); }
+.sum-meter-row.is-muted .sum-meter-track i { background: var(--ink-soft); }
+
+/* Drama Triangle continuum (Card 4, echoing Slide 29) */
+.sum-triad {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px;
+}
+.sum-triad-item {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 11px 13px; border-radius: 12px;
+  background: var(--card); border: 1px solid var(--line);
+  border-top-width: 3px;
+  transition: background-color .5s ease, border-color .5s ease;
+}
+.sum-triad-item.is-cause { border-top-color: var(--hl-rust); }
+.sum-triad-item.is-effect { border-top-color: var(--hl-plum); }
+.sum-triad-item.is-sol { border-top-color: var(--hl-sage); }
+.sum-triad-tag { font-size: calc(12px * var(--fs)); font-weight: 700; color: var(--ink-soft); }
+.sum-triad-item.is-cause .sum-triad-tag { color: var(--hl-rust); }
+.sum-triad-item.is-effect .sum-triad-tag { color: var(--hl-plum); }
+.sum-triad-item.is-sol .sum-triad-tag { color: var(--hl-sage); }
+.sum-triad-item strong { font-size: calc(15.5px * var(--fs)); line-height: 1.4; color: var(--ink); }
+.sum-triad-item span:last-child { font-size: calc(13px * var(--fs)); line-height: 1.55; color: var(--ink-soft); }
+
+/* Closing footer */
+.sum-foot {
+  display: flex; justify-content: center;
+  margin-top: 28px; padding-top: 22px;
+  border-top: 1px dashed var(--line);
+}
+.summary-finish {
+  order: 0;
+  min-height: 50px; padding: 11px 22px;
+  background: var(--surface); color: var(--on-surface);
+  border-color: var(--surface);
+  font-size: calc(16px * var(--fs));
+  box-shadow: var(--shadow);
+}
+.summary-finish:hover {
+  background: var(--sage-strong); border-color: var(--sage-strong);
+  color: var(--on-surface); transform: translateY(-2px);
+}
+.sum-finish-ic {
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--on-surface) 22%, transparent);
+}
+
+/* ---- Responsive breakpoints (760 / 560 / 480) ----------------------- */
+@media (max-width: 760px) {
+  .sum-steps { display: none; }
+  .sum-arc-grid { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .sum-arc-arrow { transform: rotate(-90deg); height: 18px; font-size: 15px; }
+  .sum-triad { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}
 @media (max-width: 560px) {
-  .summary-status { font-size: 14px; max-width: 35%; }
-  .summary-bar { gap: 8px; padding-inline: max(14px, env(safe-area-inset-right)); }
-  .summary-preview { font-size: 14px; gap: 6px; }
-  .summary-jump { font-size: 16px; padding-inline: 11px; }
-  .summary-head > h3 { padding-inline-start: 14px; }
+  .summary-bar { padding-inline: clamp(12px, 3.6vw, 20px); }
+  .sum-bar-inner { gap: 8px; }
+  .summary-status { font-size: calc(12.5px * var(--fs)); max-width: 44%; padding: 6px 10px; }
+  .summary-preview { font-size: calc(13px * var(--fs)); gap: 5px; }
+  .summary-preview i { display: none; }
+  .sum-index-grid { grid-template-columns: minmax(0, 1fr); gap: 7px; }
+  .summary-card { border-radius: 20px; padding: 18px 15px; }
+  .summary-card::after { display: none; }
+  .summary-finish { width: 100%; justify-content: center; }
 }
+@media (max-width: 480px) {
+  .summary-wrap { padding-inline: 14px; }
+  .summary-card { font-size: calc(18px * var(--fs)); line-height: 1.92; }
+  .summary-card li { font-size: calc(17px * var(--fs)); line-height: 1.85; padding: 10px 12px; padding-inline-start: 34px; }
+  .summary-card ol li { padding-inline-start: 40px; }
+}
+
+/* ---- Reduced motion, No-JS, and Print ------------------------------- */
 @media (prefers-reduced-motion: reduce) {
-  .summary-spark, .summary-dialog.is-open .summary-head { animation: none; }
-  #summaryPortal .portal-card:is(:hover, :focus-visible) .summary-book-lines { animation: none; }
-  .summary-dialog.has-reveals .summary-card { opacity: 1; transform: none; transition: none; }
-  .summary-jump, #summaryPortal .portal-side::before { transition: none; }
+  .summary-art, .summary-spark,
+  .summary-dialog.is-entering .summary-bar,
+  .summary-dialog.is-entering .summary-head,
+  .summary-dialog.is-entering .summary-card { animation: none !important; }
+  #summaryPortal .portal-card:is(:hover, :focus-visible) .summary-book-lines,
+  #summaryPortal .portal-card:is(:hover, :focus-visible) .summary-arc { animation: none !important; }
+  .summary-dialog, .summary-jump, .sum-step, .sum-step-ink,
+  .sum-meter-track i, #summaryPortal .portal-side::before,
+  .summary-preview span { transition: none !important; }
 }
+
+:root:not(.js) #summaryPortal { display: none; }
+:root:not(.js) #summary {
+  padding: clamp(44px, 7vh, 80px) 0;
+  border-bottom: 1px solid var(--line);
+}
+
 @media print {
-  .summary-index, .summary-progress { display: none !important; }
-  .summary-dialog.has-reveals .summary-card, .summary-dialog.is-open .summary-head { opacity: 1 !important; transform: none !important; animation: none !important; transition: none !important; }
+  #summaryPortal, .summary-bar, .summary-index, .sum-foot, .summary-finish {
+    display: none !important;
+  }
+  .summary-dialog, .sum-sheet {
+    display: block !important; position: static !important;
+    width: auto !important; height: auto !important;
+    overflow: visible !important; clip-path: none !important;
+    background: none !important;
+  }
+  .summary-card, .sum-citation {
+    box-shadow: none !important; break-inside: avoid;
+    opacity: 1 !important; transform: none !important; animation: none !important;
+  }
 }
