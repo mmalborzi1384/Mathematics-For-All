@@ -355,7 +355,7 @@
     3,
     '<div class="sum-triad">' +
       '<div class="sum-triad-item is-cause"><span class="sum-triad-tag">علت · شرور</span><strong>نژادپرستی علمی</strong><span>از گالتون تا هندریک ورورد</span></div>' +
-      '<div class="sum-triad-item is-effect"><span class="sum-triad-tag">معلول · قربانیان</span><strong>بااستعدادان طردشده</strong><span>موهبت‌های دوسویهٔ موفقیت</span></div>' +
+      '<div class="sum-triad-item is-effect"><span class="sum-triad-tag">معلول · قربانیان</span><strong>بااستعدادان طردشده</strong><span>نعمت‌های دوجانبهٔ موفقیت</span></div>' +
       '<div class="sum-triad-item is-sol"><span class="sum-triad-tag">راه‌حل · صلح‌آفرین</span><strong>لو ویگوتسکی</strong><span>نظریهٔ تحول‌یافتهٔ نقص‌شناسی</span></div>' +
     '</div>',
     "ul"
