@@ -127,9 +127,96 @@
   nav.appendChild(navGrid);
 
   var flashTimer = 0;
+  var sheetGlideRAF = 0;
+  var activeSummaryAnims = [];
+  var EASE_OUT = "cubic-bezier(0.22, 1, 0.36, 1)";
+
+  function cancelSheetGlide() {
+    if (sheetGlideRAF) {
+      cancelAnimationFrame(sheetGlideRAF);
+      sheetGlideRAF = 0;
+    }
+  }
+
+  function easeVelvet(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  function glideSheetTo(targetTop, durationMs) {
+    cancelSheetGlide();
+    var max = Math.max(0, sheet.scrollHeight - sheet.clientHeight);
+    var dest = Math.max(0, Math.min(max, targetTop));
+    if (reduce.matches) {
+      sheet.scrollTop = dest;
+      updateReading(true);
+      return;
+    }
+    var start = sheet.scrollTop;
+    if (Math.abs(dest - start) < 2) {
+      sheet.scrollTop = dest;
+      updateReading(true);
+      return;
+    }
+    var dur = durationMs || 560;
+    var t0 = performance.now();
+    var lastWrittenTop = start;
+    function step() {
+      if (Math.abs(sheet.scrollTop - lastWrittenTop) > 4) {
+        cancelSheetGlide();
+        return;
+      }
+      var t = Math.min(1, Math.max(0, (performance.now() - t0) / dur));
+      sheet.scrollTop = start + (dest - start) * easeVelvet(t);
+      lastWrittenTop = sheet.scrollTop;
+      if (t < 1) {
+        sheetGlideRAF = requestAnimationFrame(step);
+      } else {
+        sheetGlideRAF = 0;
+        sheet.scrollTop = dest;
+        updateReading(true);
+        /* Reveal visible cards at the landing destination cleanly */
+        var sRect = sheet.getBoundingClientRect();
+        cards.forEach(function (c) {
+          var cr = c.getBoundingClientRect();
+          if (cr.bottom > sRect.top + 40 && cr.top < sRect.bottom - 20) {
+            animateSummaryCard(c, 0);
+          }
+        });
+      }
+    }
+    sheetGlideRAF = requestAnimationFrame(step);
+  }
+
+  function runSummaryAnim(el, keyframes, opts) {
+    if (!el || !el.animate || reduce.matches) return null;
+    var a = el.animate(keyframes, opts);
+    if (document.timeline && typeof document.timeline.currentTime === "number") {
+      try { a.startTime = document.timeline.currentTime; } catch (e) {}
+    }
+    activeSummaryAnims.push(a);
+    var done = function () {
+      var idx = activeSummaryAnims.indexOf(a);
+      if (idx >= 0) activeSummaryAnims.splice(idx, 1);
+    };
+    a.onfinish = done;
+    a.oncancel = done;
+    return a;
+  }
+
+  function cancelSummaryAnims() {
+    while (activeSummaryAnims.length) {
+      var a = activeSummaryAnims.pop();
+      try { a.cancel(); } catch (e) {}
+    }
+  }
+
   function jumpToCard(i) {
     var card = cards[i];
     if (!card) return;
+    if (!dialog.classList.contains("is-settled")) {
+      settleSummary();
+      void dialog.offsetHeight;
+    }
     var heading = card.querySelector("h3");
     if (heading) {
       heading.setAttribute("tabindex", "-1");
@@ -137,12 +224,20 @@
     }
     var top = card.getBoundingClientRect().top - sheet.getBoundingClientRect().top + sheet.scrollTop;
     var targetTop = Math.max(0, top - bar.offsetHeight - 18);
-    sheet.scrollTo({ top: targetTop, behavior: reduce.matches ? "instant" : "smooth" });
+    glideSheetTo(targetTop, 620);
     cards.forEach(function (c, idx) { c.classList.toggle("is-spotlight", idx === i); });
+    var numBadge = card.querySelector(".summary-number");
+    if (numBadge) {
+      runSummaryAnim(numBadge, [
+        { transform: "scale(0.86)" },
+        { transform: "scale(1.12)", offset: 0.55 },
+        { transform: "scale(1)" }
+      ], { duration: 460, easing: EASE_OUT });
+    }
     clearTimeout(flashTimer);
     flashTimer = setTimeout(function () {
       cards.forEach(function (c) { c.classList.remove("is-spotlight"); });
-    }, 1100);
+    }, 1150);
   }
 
   var stepBtns = [];
@@ -194,7 +289,7 @@
   if (head) head.appendChild(nav);
 
   status.addEventListener("click", function () {
-    sheet.scrollTo({ top: 0, behavior: reduce.matches ? "instant" : "smooth" });
+    glideSheetTo(0, 480);
   });
 
   /* Subtle, accessible aria-hidden visual figures grounded directly in the
@@ -305,8 +400,13 @@
 
     var active = -1;
     var edge = bar.getBoundingClientRect().bottom + 76;
+    var viewBottom = window.innerHeight - 24;
     for (var i = 0; i < cards.length; i++) {
-      if (cards[i].getBoundingClientRect().top <= edge) active = i;
+      var cr = cards[i].getBoundingClientRect();
+      if (cr.top <= edge) active = i;
+      if (!sheetGlideRAF && !closing && cr.bottom > edge - 40 && cr.top < viewBottom) {
+        animateSummaryCard(cards[i], 0);
+      }
     }
     if (p > 0.985) active = cards.length - 1;
 
@@ -330,10 +430,115 @@
     }
   }
 
+  /* Progressive scroll-triggered WAAPI choreography across all 7 cards:
+     Base CSS stays opacity:1 / transform:none (zero stuck hidden elements in
+     print, reduced-motion, or instant DOM jumps), while scrolling into any
+     unvisited card smoothly animates its frame, badge, prose, bars, & nodes. */
+  var seenCards = new WeakSet();
+  var revealedCount = 0;
+
+  function animateSummaryCard(card, baseDelay) {
+    if (!card || seenCards.has(card) || reduce.matches) return;
+    seenCards.add(card);
+    revealedCount++;
+    var d0 = baseDelay || 0;
+    runSummaryAnim(card, [
+      { transform: "translateY(18px)" },
+      { transform: "translateY(0)" }
+    ], { duration: 420, delay: d0, easing: EASE_OUT, fill: "backwards" });
+
+    var badge = card.querySelector(".summary-number");
+    if (badge) {
+      runSummaryAnim(badge, [
+        { transform: "scale(0.84)" },
+        { transform: "scale(1.08)", offset: 0.58 },
+        { transform: "scale(1)" }
+      ], { duration: 420, delay: d0 + 25, easing: EASE_OUT });
+    }
+
+    var blocks = Array.prototype.slice.call(card.querySelectorAll(":scope > p, :scope > ul > li, :scope > ol > li"));
+    blocks.forEach(function (el, idx) {
+      runSummaryAnim(el, [
+        { opacity: 0.66, transform: "translateY(9px)" },
+        { opacity: 1, transform: "translateY(0)" }
+      ], { duration: 360, delay: d0 + Math.min(idx, 5) * 28, easing: EASE_OUT, fill: "backwards" });
+    });
+
+    var nodes = Array.prototype.slice.call(card.querySelectorAll(".sum-arc-node, .sum-triad-item"));
+    nodes.forEach(function (el, idx) {
+      runSummaryAnim(el, [
+        { opacity: 0.6, transform: "translateY(9px) scale(0.985)" },
+        { opacity: 1, transform: "translateY(0) scale(1)" }
+      ], { duration: 390, delay: d0 + 35 + idx * 55, easing: EASE_OUT, fill: "backwards" });
+    });
+
+    var meters = Array.prototype.slice.call(card.querySelectorAll(".sum-meter-track i"));
+    meters.forEach(function (barEl, idx) {
+      var w = parseFloat(barEl.style.getPropertyValue("--w"));
+      if (!isFinite(w)) w = 0.5;
+      runSummaryAnim(barEl, [
+        { transform: "scaleX(" + Math.min(w, 0.12) + ")" },
+        { transform: "scaleX(" + w + ")" }
+      ], { duration: 620, delay: d0 + 60 + idx * 75, easing: EASE_OUT, fill: "backwards" });
+    });
+  }
+
+  function choreographSummaryOpen() {
+    if (reduce.matches) return;
+    cancelSummaryAnims();
+    seenCards = new WeakSet();
+    revealedCount = 0;
+
+    runSummaryAnim(bar, [
+      { opacity: 0, transform: "translateY(-10px)" },
+      { opacity: 1, transform: "translateY(0)" }
+    ], { duration: 380, delay: 35, easing: EASE_OUT, fill: "backwards" });
+
+    if (head) {
+      var kickerEl = head.querySelector(".portal-kicker");
+      var titleH2 = head.querySelector("h2");
+      var subP = head.querySelector(":scope > p");
+      var citeEl = head.querySelector(".sum-citation");
+      [kickerEl, titleH2, subP].forEach(function (el, idx) {
+        if (!el) return;
+        runSummaryAnim(el, [
+          { opacity: 0, transform: "translateY(14px)" },
+          { opacity: 1, transform: "translateY(0)" }
+        ], { duration: 450, delay: 75 + idx * 45, easing: EASE_OUT, fill: "backwards" });
+      });
+      if (citeEl) {
+        runSummaryAnim(citeEl, [
+          { opacity: 0, transform: "translateY(15px)" },
+          { opacity: 1, transform: "translateY(0)" }
+        ], { duration: 470, delay: 175, easing: EASE_OUT, fill: "backwards" });
+      }
+      runSummaryAnim(nav, [
+        { opacity: 0, transform: "translateY(15px)" },
+        { opacity: 1, transform: "translateY(0)" }
+      ], { duration: 470, delay: 220, easing: EASE_OUT, fill: "backwards" });
+      links.forEach(function (btn, idx) {
+        runSummaryAnim(btn, [
+          { opacity: 0, transform: "translateY(8px)" },
+          { opacity: 1, transform: "translateY(0)" }
+        ], { duration: 360, delay: 245 + idx * 24, easing: EASE_OUT, fill: "backwards" });
+      });
+    }
+    if (cards[0]) animateSummaryCard(cards[0], 210);
+  }
+
+  var cardIO = null;
+  if (typeof IntersectionObserver !== "undefined") {
+    cardIO = new IntersectionObserver(function (entries) {
+      if (!dialog.open || closing || sheetGlideRAF) return;
+      entries.forEach(function (en) {
+        if (en.isIntersecting) animateSummaryCard(en.target, 0);
+      });
+    }, { root: sheet, threshold: 0.06, rootMargin: "0px 0px -4% 0px" });
+    cards.forEach(function (c) { cardIO.observe(c); });
+  }
+
   function settleSummary() {
     clearTimeout(settleTimer);
-    clearTimeout(enterTimer);
-    dialog.classList.remove("is-entering");
     if (dialog.open && !closing) {
       dialog.classList.add("is-settled");
       root.classList.add("modal-settled");
@@ -347,12 +552,18 @@
     }
   }
 
-  function scheduleReading() {
+  function onManualSummaryInput() {
+    cancelSheetGlide();
     onEarlySummaryScroll();
+  }
+
+  function scheduleReading() {
+    if (sheet.scrollTop > 2) onEarlySummaryScroll();
     if (!frame) frame = requestAnimationFrame(function () { updateReading(false); });
   }
-  sheet.addEventListener("touchmove", onEarlySummaryScroll, { passive: true });
-  sheet.addEventListener("wheel", onEarlySummaryScroll, { passive: true });
+  sheet.addEventListener("touchstart", cancelSheetGlide, { passive: true });
+  sheet.addEventListener("touchmove", onManualSummaryInput, { passive: true });
+  sheet.addEventListener("wheel", onManualSummaryInput, { passive: true });
   sheet.addEventListener("scroll", scheduleReading, { passive: true });
 
   /* ---- 4. Open / Close / History / Print lifecycle ----------------------- */
@@ -421,12 +632,15 @@
     /* Commit closed circle(0px) synchronously, then start expansion immediately */
     void dialog.offsetWidth;
     dialog.classList.add("is-open");
+    choreographSummaryOpen();
     updateReading(true);
 
-    /* Once the circular reveal and entrance stagger complete, drop clip-path
-       and entrance classes together (.is-settled) so scrolling runs on pure
-       unmasked layers with every card at opacity: 1 and transform: none. */
-    settleTimer = setTimeout(settleSummary, reduce.matches ? 0 : 880);
+    /* Once the .68s circular reveal completes, drop clip-path (.is-settled) so
+       scrolling runs on pure unmasked GPU layers from 700ms onward. */
+    settleTimer = setTimeout(settleSummary, reduce.matches ? 0 : 700);
+    enterTimer = setTimeout(function () {
+      dialog.classList.remove("is-entering");
+    }, reduce.matches ? 0 : 750);
 
     var titleEl = document.getElementById("summaryTitle");
     if (titleEl) titleEl.focus({ preventScroll: true });
@@ -445,6 +659,8 @@
   function finishClose() {
     clearTimeout(settleTimer);
     clearTimeout(enterTimer);
+    cancelSheetGlide();
+    cancelSummaryAnims();
     dialog.classList.remove("is-open", "is-settled", "is-entering");
     if (dialog.open) dialog.close();
     root.classList.remove("summary-lock", "modal-settled");
@@ -513,6 +729,9 @@
     if (location.hash === "#summary") open(false);
     else close(true);
   });
+  window.addEventListener("hashchange", function () {
+    if (location.hash === "#summary" && (!dialog.open || closing)) open(false);
+  });
 
   /* Print support: exit top layer cleanly while keeping scroll offset */
   var printOpen = false, printScroll = 0;
@@ -546,6 +765,9 @@
       return {
         open: dialog.open,
         settled: dialog.classList.contains("is-settled"),
+        gliding: !!sheetGlideRAF,
+        activeAnims: activeSummaryAnims.length,
+        revealedCards: revealedCount,
         scrollTop: Math.round(sheet.scrollTop),
         scrollHeight: Math.round(sheet.scrollHeight),
         clientHeight: Math.round(sheet.clientHeight),
