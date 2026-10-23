@@ -53,6 +53,8 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         '.ppl-quote',
         '.ppl-tag',
         '.ppl-v',
+        '#hero .basmala',
+        '#hero .hero-course',
         '#hero .hero-card .hc-1',
         '#hero .hero-card .hc-2',
         '#hero .hero-card .hc-3',
@@ -81,9 +83,37 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     ok(textCheck.totalCompared >= 220, `compared ${textCheck.totalCompared} live tokenized blocks against HEAD`);
     ok(textCheck.mismatches.length === 0, `100% character-for-character live DOM fidelity: ${textCheck.mismatches.join('; ')}`);
 
-    /* 2. Mirror RTL/LTR direction verification across chapters, slides, portals, & closing */
+    /* 2. Mirror RTL/LTR direction verification across #hero, chapters, slides, portals, & closing */
+    const heroMidStream = await fidelityPage.evaluate(() => {
+      document.getAnimations({ subtree: true }).forEach(a => {
+        a.pause();
+        a.currentTime = 500;
+      });
+      const faCard = document.getElementById('heroCardFa');
+      const enCard = document.getElementById('heroCardEn');
+      const faOpacity = parseFloat(getComputedStyle(faCard).opacity);
+      const enOpacity = parseFloat(getComputedStyle(enCard).opacity);
+      const midBlurred = [...document.querySelectorAll('#hero .w')].some(w => {
+        const f = getComputedStyle(w).filter;
+        return f && f !== 'none' && f !== 'blur(0px)';
+      });
+      document.getAnimations({ subtree: true }).forEach(a => a.play());
+      window.dispatchEvent(new Event('beforeprint'));
+      const afterPrintSharp = [...document.querySelectorAll('#hero .w')].every(w => {
+        const cs = getComputedStyle(w);
+        return cs.opacity === '1' && (cs.filter === 'none' || cs.filter === 'blur(0px)');
+      });
+      return { staggeredCards: faOpacity > enOpacity, midBlurred, afterPrintSharp };
+    });
+    ok(heroMidStream.staggeredCards, '#heroCardFa leads #heroCardEn smoothly during staggered opening rise');
+    ok(heroMidStream.midBlurred, '#hero opening words bloom smoothly through GPU velvet blur mid-animation');
+    ok(heroMidStream.afterPrintSharp, 'beforeprint immediately finishes all #hero blur/word animations cleanly');
+
     const dirAudit = await fidelityPage.evaluate(() => {
       const TS = window.__textStream;
+      const heroOk =
+        !TS.isLtr(document.getElementById('heroCardFa')) &&
+        TS.isLtr(document.getElementById('heroCardEn'));
       const chaptersOk = [...document.querySelectorAll('.chapter')].every(ch => {
         const h2 = ch.querySelector('h2');
         const en = ch.querySelector('.ch-en');
@@ -102,8 +132,9 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       const closingOk =
         !TS.isLtr(document.querySelector('#closing .thanks-fa')) &&
         TS.isLtr(document.querySelector('#closing .thanks-en'));
-      return { chaptersOk, scenesOk, peopleOk, closingOk };
+      return { heroOk, chaptersOk, scenesOk, peopleOk, closingOk };
     });
+    ok(dirAudit.heroOk, 'hero cards classify #heroCardFa as RTL and #heroCardEn as LTR');
     ok(dirAudit.chaptersOk, 'all 5 chapter dividers classify Persian h2 as RTL and .ch-en as LTR');
     ok(dirAudit.scenesOk, 'all bilingual scene pairs classify .boxin-fa as RTL and .boxin-en as LTR');
     ok(dirAudit.peopleOk, 'all 3 biography headers classify Persian name as RTL and Latin name as LTR');
