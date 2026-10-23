@@ -282,6 +282,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
 #rail {
   position: fixed; left: 20px; top: 50%; transform: translateY(-50%); z-index: 40;
   width: 30px; height: min(84vh, 880px);
+  height: min(84svh, 880px);
   --rail-pad: 14px;
 }
 #rail .rail-line,
@@ -447,6 +448,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
 /* ---------------------------------------------------------------- 08 chapter dividers */
 .chapter {
   padding: clamp(90px, 14vh, 150px) 0 clamp(30px, 5vh, 50px);
+  padding: clamp(90px, 14svh, 150px) 0 clamp(30px, 5svh, 50px);
   text-align: center; position: relative; overflow: clip;
 }
 .chapter .wrap { position: relative; z-index: 1; }
@@ -468,6 +470,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
 
 /* ---------------------------------------------------------------- 09 scenes */
 .scene { padding: clamp(48px, 8vh, 84px) 0; border-top: 1px solid var(--line); transition: border-color 0.5s ease; }
+.scene { padding: clamp(48px, 8svh, 84px) 0; }
 .scene-head { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
 .scene-head-tx { min-width: 0; }
 .scene-num {
@@ -538,6 +541,152 @@ body.tab-hidden .blob { animation-play-state: paused; }
 .fnbar .fn-sm { font-size: calc(13px * var(--fs)); }
 .fnbar .fn-xs { font-size: calc(12px * var(--fs)); }
 
+/* ---------------------------------------------------------------- 09a the trigger
+   The dossier used to sit at the bottom of the scroll; it is now reached
+   through one card that reads as a door: three names on a drawn triangle,
+   a breathing hub, and a monogram that lifts as the pointer arrives. */
+#portal {
+  position: relative;
+  padding: clamp(56px, 9vh, 100px) 0 clamp(58px, 9vh, 104px);
+  padding: clamp(56px, 9svh, 100px) 0 clamp(58px, 9svh, 104px);
+  border-top: 1px solid var(--line);
+  transition: border-color .5s ease;
+}
+.portal-card {
+  position: relative; isolation: isolate; overflow: hidden;
+  max-width: 920px; margin-inline: auto;
+  display: grid; align-items: center;
+  grid-template-columns: minmax(0, 1fr) clamp(160px, 23vw, 262px);
+  grid-template-areas: "body side";
+  gap: clamp(14px, 3vw, 34px);
+  padding: clamp(20px, 3.2vw, 36px) clamp(20px, 3.4vw, 40px);
+  background: var(--card);
+  border: 1.5px solid var(--line); border-radius: 30px;
+  box-shadow: var(--shadow);
+  color: inherit; text-decoration: none;
+  transition: transform .5s cubic-bezier(.22, 1, .36, 1), border-color .4s ease,
+              box-shadow .5s ease, background-color .5s ease;
+}
+.portal-card:hover { transform: translateY(-3px); border-color: var(--sage-soft); }
+.portal-card:focus-visible { outline: 3px solid var(--sage); outline-offset: 4px; }
+.portal-glow {
+  position: absolute; z-index: -1; inset: auto auto -40% -12%;
+  width: 62%; aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--sage) 22%, transparent), transparent 68%);
+  filter: blur(6px); opacity: .8;
+  animation: portalBreathe 9s ease-in-out infinite;
+}
+@keyframes portalBreathe {
+  0%, 100% { transform: scale(1); opacity: .55; }
+  50% { transform: scale(1.12); opacity: .9; }
+}
+
+/* ---- the right-hand of the card (left, in this RTL page) ---------------- */
+.portal-body {
+  grid-area: body; position: relative;
+  display: flex; flex-direction: column; align-items: flex-start; text-align: start;
+}
+.portal-kicker {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-size: calc(14.5px * var(--fs)); font-weight: 700; color: var(--sage-strong);
+}
+.portal-kicker::before {
+  content: ""; width: 22px; height: 2px; border-radius: 2px; background: var(--sage);
+}
+.portal-h2 {
+  margin: 9px 0 0; color: var(--ink);
+  font-size: clamp(23px, 3.4vw, 35px); line-height: 1.32; font-weight: 700;
+}
+.portal-sub {
+  margin-top: 9px; color: var(--ink-soft); max-width: 54ch;
+  font-size: calc(16.5px * var(--fs)); line-height: 1.9; text-align: justify;
+}
+.portal-cta {
+  display: inline-flex; align-items: center; gap: 10px;
+  margin-top: clamp(15px, 2.4vw, 22px);
+  padding: 11px 16px 11px 12px;
+  background: var(--surface); color: var(--on-surface);
+  border-radius: 999px; font-weight: 700; font-size: calc(15.5px * var(--fs));
+  box-shadow: 0 16px 26px -20px rgba(55, 65, 81, .8);
+  transition: background-color .35s ease, box-shadow .35s ease, padding .35s ease;
+}
+.portal-cta-tx { padding-inline-start: 4px; }
+.portal-cta-ic {
+  display: grid; place-items: center; flex: 0 0 auto;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: color-mix(in srgb, var(--on-surface) 24%, transparent);
+  transition: transform .4s cubic-bezier(.22, 1, .36, 1), background-color .35s ease;
+}
+.portal-cta-ic svg { width: 15px; height: 15px; }
+.portal-card:hover .portal-cta { background: var(--sage-strong); box-shadow: 0 20px 30px -20px rgba(55, 65, 81, .9); }
+.portal-card:hover .portal-cta-ic { transform: translateX(-5px); background: color-mix(in srgb, var(--on-surface) 34%, transparent); }
+
+/* ---- the mark ---------------------------------------------------------- */
+.portal-side {
+  grid-area: side; position: relative; justify-self: center;
+  width: 100%; max-width: 262px; aspect-ratio: 1;
+}
+.portal-art { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.portal-ring-a {
+  stroke: var(--sage); stroke-width: 1.2; opacity: .34;
+  stroke-dasharray: 2 8; transform-origin: 150px 150px;
+  animation: portalSpin 52s linear infinite;
+}
+.portal-ring-b {
+  stroke: var(--beige); stroke-width: 1.4; opacity: .7;
+  transform-origin: 150px 150px;
+  animation: portalSpin 38s linear infinite reverse;
+}
+@keyframes portalSpin { to { transform: rotate(360deg); } }
+.portal-tri { stroke-width: 2.1; stroke-dasharray: 1; stroke-dashoffset: 0; }
+.portal-arc { stroke-width: 1.7; opacity: .55; stroke-dasharray: 1; stroke-dashoffset: 0; }
+.portal-card:hover .portal-tri,
+.portal-card:focus-visible .portal-tri { animation: portalDraw 1.25s cubic-bezier(.22, 1, .36, 1) both; }
+@keyframes portalDraw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+
+.portal-mons { position: absolute; inset: 0; }
+.portal-mon {
+  position: absolute;
+  display: grid; place-items: center;
+  width: clamp(42px, 4.6vw, 52px); aspect-ratio: 1; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--beige-soft); color: var(--sage-strong);
+  border: 1.5px solid color-mix(in srgb, var(--sage) 38%, transparent);
+  font-size: calc(20px * var(--fs)); font-weight: 700; line-height: 1;
+  box-shadow: 0 10px 22px -16px rgba(55, 65, 81, .7);
+  animation: portalFloat 7.4s ease-in-out infinite;
+  transition: background-color .4s ease, color .4s ease, scale .45s cubic-bezier(.22, 1, .36, 1), border-color .4s ease;
+}
+@keyframes portalFloat { 50% { translate: 0 -7px; } }
+.pm-a { left: 50%; top: 17.3%; animation-delay: -0.4s; }
+.pm-b { left: 82%; top: 69.3%; animation-delay: -2.9s; }
+.pm-c { left: 18%; top: 69.3%; animation-delay: -5.1s; }
+.portal-card:hover .portal-mon, .portal-card:focus-visible .portal-mon {
+  background: var(--surface); color: var(--on-surface);
+  border-color: var(--surface); scale: 1.09;
+}
+.portal-hub {
+  position: absolute; left: 50%; top: 52%;
+  display: grid; place-items: center;
+  width: clamp(46px, 5vw, 56px); aspect-ratio: 1; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--surface); color: var(--on-surface);
+  box-shadow: 0 14px 26px -16px rgba(55, 65, 81, .85);
+}
+.portal-hub svg { width: 21px; height: 21px; transition: transform .45s cubic-bezier(.22, 1, .36, 1); }
+.portal-card:hover .portal-hub svg { transform: translateX(-4px); }
+.portal-hub::before, .portal-hub::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  border: 1.5px solid var(--sage); opacity: 0;
+  animation: portalPing 3.6s cubic-bezier(.22, 1, .36, 1) infinite;
+}
+.portal-hub::after { animation-delay: 1.8s; }
+@keyframes portalPing {
+  0% { transform: scale(1); opacity: .55; }
+  70% { transform: scale(1.85); opacity: 0; }
+  100% { transform: scale(1.85); opacity: 0; }
+}
+
 /* ---------------------------------------------------------------- 09b people
    Persian-only dossier: three lives, three tabs each. Cards, pills and the
    PDF highlight colours come from the deck above, so the section reads as
@@ -545,12 +694,88 @@ body.tab-hidden .blob { animation-play-state: paused; }
    Panes and panels are absolutely-positioned stacks, so app.js measures them
    and animates the two wrapper heights — switching never jumps the page. */
 
+/* ---- the full-screen view ---------------------------------------------
+   The dossier is a view, not a section: #people sits after </main>, is
+   hidden from layout and from assistive tech, and scrolls inside its own
+   sheet. That is what takes the height history of the dossier out of the
+   document — nothing three tabs tall can move the page any more. */
 #people {
-  position: relative;
-  padding: clamp(46px, 8vh, 84px) 0 clamp(40px, 6vh, 68px);
-  border-top: 1px solid var(--line);
-  transition: border-color .5s ease;
+  position: fixed; inset: 0; z-index: 90;
+  display: none;
+  background: var(--bg);
+  background-image: radial-gradient(120% 78% at 50% 0%, var(--card), transparent 72%);
+  overscroll-behavior: contain;
+  clip-path: circle(0px at var(--ppl-ox, 50%) var(--ppl-oy, 42%));
+  transition: clip-path .82s cubic-bezier(.62, .01, .2, 1);
 }
+#people.is-mounted { display: block; }
+#people.is-open { clip-path: circle(var(--ppl-r, 160vmax) at var(--ppl-ox, 50%) var(--ppl-oy, 42%)); }
+
+.ppl-sheet {
+  position: absolute; inset: 0;
+  overflow-y: auto; overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+.ppl-sheet .wrap { padding-bottom: calc(34px + env(safe-area-inset-bottom, 0px)); }
+/* air under the bar, not above it: the bar has to own the very top edge,
+   or the content scrolls through a 16px slit over it */
+.ppl-sheet .ppl-head { padding-top: clamp(12px, 2.6vh, 26px); }
+.ppl-sheet:focus, .ppl-sheet:focus-visible { outline: none; }
+
+/* the view's own bar: back out, and the name of the thing you are in */
+.ppl-bar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 0 11px;
+  background: var(--bar-bg);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.ppl-barlabel {
+  font-size: calc(12.5px * var(--fs)); color: var(--ink-soft); letter-spacing: .02em;
+  order: 2; padding-inline-end: 2px;
+}
+.ppl-back {
+  order: 1;
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 8px 15px 8px 12px;
+  border: 1.5px solid var(--line); border-radius: 999px; background: var(--card);
+  font: inherit; font-weight: 700; font-size: calc(14.5px * var(--fs)); color: var(--sage-strong);
+  cursor: pointer;
+  transition: background-color .3s ease, border-color .3s ease, transform .3s ease, color .3s ease;
+}
+.ppl-back:hover { border-color: var(--sage); background: var(--beige-soft); transform: translateX(3px); }
+.ppl-back:focus-visible { outline: 3px solid var(--sage); outline-offset: 3px; }
+.ppl-back-ic { display: inline-grid; place-items: center; width: 20px; height: 20px; }
+.ppl-back-ic svg { width: 18px; height: 18px; }
+.ppl-foot {
+  display: flex; justify-content: center;
+  margin-top: 30px; padding-top: 22px; border-top: 1px dashed var(--line);
+}
+.ppl-back-b { padding: 10px 20px; }
+
+/* the parts arrive just behind the circle, so the wipe never lands on a
+   page that is already finished. The stagger lives on .is-entering only —
+   a delay left on .ppl-stage would postpone every later height change
+   (each person switch) by a third of a second. */
+.ppl-sheet .wrap > * {
+  opacity: 0; transform: translateY(18px);
+  transition: opacity .46s ease, transform .58s cubic-bezier(.22, 1, .36, 1);
+}
+#people.is-open .ppl-sheet .wrap > * { opacity: 1; transform: none; }
+#people.is-entering .ppl-sheet .wrap > .ppl-bar { transition-delay: .10s; }
+#people.is-entering .ppl-sheet .wrap > .ppl-head { transition-delay: .20s; }
+#people.is-entering .ppl-sheet .wrap > .ppl-switch { transition-delay: .28s; }
+#people.is-entering .ppl-sheet .wrap > .ppl-stage { transition-delay: .34s; }
+#people.is-entering .ppl-sheet .wrap > .ppl-foot { transition-delay: .40s; }
+#people.is-entering .ppl-person[aria-selected="true"] .ppl-mono {
+  animation: pplPop .6s cubic-bezier(.22, 1, .36, 1) .34s both;
+}
+
+/* the deck behind the view must not scroll while the view is up */
+html.ppl-lock, html.ppl-lock body { overflow: hidden; }
 .ppl-head { max-width: 780px; margin-inline: auto; text-align: center; }
 .ppl-kicker {
   display: inline-flex; align-items: center; gap: 10px;
@@ -709,10 +934,14 @@ body.tab-hidden .blob { animation-play-state: paused; }
 }
 .ppl-quote footer { margin-top: 3px; color: var(--ink-soft); font-size: calc(13.5px * var(--fs)); line-height: 1.7; }
 
-/* the "at a glance" card: a dossier slip, stretched to the text's height,
-   with the person's initial as a watermark so the empty room is designed */
+/* the "at a glance" card: a dossier slip. It used to stretch to the text's
+   height, which spread four facts across 600px; it now keeps its own height
+   and the person's initial carries the bottom of the slip. */
 .ppl-facts {
-  align-self: stretch; position: relative; overflow: hidden;
+  /* the card is a slip of paper, not a column filler: it takes the height
+     of its four facts and stops, instead of stretching 600px and spacing
+     them like islands */
+  align-self: start; position: relative; overflow: hidden;
   display: flex; flex-direction: column;
   background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
   padding: 15px 17px 17px;
@@ -730,7 +959,8 @@ body.tab-hidden .blob { animation-play-state: paused; }
 .ppl-facts h4::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--line); }
 .ppl-facts ul {
   position: relative; list-style: none; margin: 0; padding: 0;
-  flex: 1 1 auto; display: grid; gap: 12px; align-content: space-evenly;
+  flex: 1 1 auto; display: grid; gap: clamp(14px, 2.4vh, 26px);
+  align-content: start;
 }
 .ppl-facts li {
   position: relative; padding-inline-start: 15px; display: grid; gap: 1px;
@@ -813,6 +1043,68 @@ body.tab-hidden .blob { animation-play-state: paused; }
   .ppl-text > * { opacity: 1; transform: none; }
 }
 
+/* ---- the trigger and the view, per screen ------------------------------ */
+@media (max-width: 760px) {
+  #portal { padding: clamp(40px, 7vh, 64px) 0 clamp(44px, 8vh, 74px); }
+  #portal { padding: clamp(40px, 7svh, 64px) 0 clamp(44px, 8svh, 74px); }
+  .portal-card {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "side" "body";
+    padding: 16px 18px 20px;
+    border-radius: 24px;
+  }
+  .portal-side { max-width: 178px; margin: 2px auto 4px; }
+  .portal-cta { align-self: stretch; justify-content: center; padding: 12px 16px; }
+  .portal-h2 { font-size: clamp(21px, 5.4vw, 27px); }
+  .portal-sub { font-size: calc(15.5px * var(--fs)); line-height: 1.85; }
+}
+@media (max-width: 900px) {
+  /* the deck reserves 30px on the inline end for its rail; the view has
+     no rail, so it takes the full column back */
+  #people .wrap { padding-inline-end: clamp(16px, 4vw, 40px); }
+}
+@media (max-width: 560px) {
+  .ppl-barlabel { display: none; }
+  .ppl-bar { justify-content: flex-start; }
+  .ppl-back { font-size: calc(14px * var(--fs)); padding: 7px 13px 7px 11px; }
+}
+@media (max-height: 560px) and (min-width: 761px) {
+  .portal-side { max-width: 150px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #people { transition: none; }
+  .ppl-sheet .wrap > * { opacity: 1; transform: none; transition: none; }
+  .portal-glow, .portal-ring-a, .portal-ring-b, .portal-mon, .portal-hub::before,
+  .portal-hub::after { animation: none; }
+  .portal-card, .portal-cta-ic, .portal-hub svg, .portal-mon { transition: none; }
+  .portal-card:hover .portal-tri, .portal-card:focus-visible .portal-tri { animation: none; }
+}
+
+/* no JS: the door cannot open, so the dossier stays where it used to be —
+   a plain section after the deck, every pane and panel expanded */
+:root:not(.js) #portal { display: none; }
+:root:not(.js) #people {
+  position: static; display: block; clip-path: none; background-image: none;
+  padding: clamp(46px, 8vh, 84px) 0 clamp(40px, 6vh, 68px);
+  padding: clamp(46px, 8svh, 84px) 0 clamp(40px, 6svh, 68px);
+  border-top: 1px solid var(--line);
+}
+:root:not(.js) .ppl-sheet { position: static; overflow: visible; }
+:root:not(.js) .ppl-sheet .wrap > * { opacity: 1; transform: none; }
+:root:not(.js) .ppl-bar, :root:not(.js) .ppl-foot { display: none; }
+
+@media print {
+  #people {
+    position: static; display: block; clip-path: none; background: none;
+    border-top: 1px solid var(--line);
+  }
+  .ppl-sheet { position: static; overflow: visible; }
+  .ppl-sheet .wrap > * { opacity: 1 !important; transform: none !important; }
+  .ppl-bar, .ppl-foot, #portal { display: none !important; }
+  .portal-glow, .portal-ring-a, .portal-ring-b, .portal-mon { display: none; }
+}
+
 /* ---------------------------------------------------------------- 10 ZPD (GSAP pinned) */
 /* ScrollTrigger owns the pin on this slide: the stage is the pinned node
    and only its children are animated, so nothing here may set sticky, a
@@ -824,10 +1116,12 @@ body.tab-hidden .blob { animation-play-state: paused; }
   min-height: 100vh; min-height: 100svh;
   display: flex; flex-direction: column; justify-content: center;
   padding: calc(76px + env(safe-area-inset-top, 0px)) 0 clamp(26px, 4.5vh, 50px);
+  padding: calc(76px + env(safe-area-inset-top, 0px)) 0 clamp(26px, 4.5svh, 50px);
 }
 .zpd-stage > .wrap { width: 100%; }
 
 .zpd-head { display: flex; align-items: center; gap: 16px; margin-bottom: clamp(16px, 3vh, 30px); }
+.zpd-head { margin-bottom: clamp(16px, 3svh, 30px); }
 .zpd-head .scene-head-tx { flex: 1 1 auto; min-width: 0; }
 .zpd-steps { display: flex; flex: 0 0 auto; gap: 7px; direction: ltr; margin-inline-start: auto; }
 .zpd-steps span {
@@ -847,6 +1141,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
   align-items: center;
   gap: clamp(4px, 0.8vw, 10px);
   min-height: clamp(180px, 26vh, 236px);
+  min-height: clamp(180px, 26svh, 236px);
   padding: clamp(10px, 1.4vw, 16px);
   background: var(--zpd-frame); border: 2px solid var(--sage); border-radius: 16px;
   transition: background-color 0.5s ease, border-color 0.5s ease;
@@ -880,12 +1175,14 @@ body.tab-hidden .blob { animation-play-state: paused; }
 .zpd-rule {
   height: 2.5px; border-radius: 2px; background: var(--ink);
   margin: clamp(12px, 2vh, 18px) 2% 0;
+  margin: clamp(12px, 2svh, 18px) 2% 0;
   transform-origin: left center;
 }
 .zpd-box[lang="fa"] .zpd-rule { transform-origin: right center; }
 .zpd-arrow {
   height: clamp(32px, 4vw, 40px);
   margin: clamp(10px, 1.6vh, 14px) 6% 0;
+  margin: clamp(10px, 1.6svh, 14px) 6% 0;
   background: var(--zpd-arrow);
   clip-path: polygon(0 26%, calc(100% - 40px) 26%, calc(100% - 40px) 0, 100% 50%, calc(100% - 40px) 100%, calc(100% - 40px) 74%, 0 74%);
   display: flex; align-items: center; justify-content: center;
@@ -901,7 +1198,15 @@ body.tab-hidden .blob { animation-play-state: paused; }
 .zpd-cap.en { font-family: "Times New Roman", Times, serif; font-size: 14.5px; direction: ltr; }
 
 /* ---------------------------------------------------------------- 11 closing */
-#closing { padding: clamp(80px, 12vh, 130px) 0 calc(90px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); text-align: center; }
+/* #closing lives outside <main> (after the dossier view in the
+   document, so the no-JS and print layouts read deck → dossier →
+   thanks); it keeps its own stacking context above .ambient. */
+#closing {
+  position: relative; z-index: 1;
+  padding: clamp(80px, 12vh, 130px) 0 calc(90px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line); text-align: center;
+}
+#closing { padding-block: clamp(80px, 12svh, 130px) calc(90px + env(safe-area-inset-bottom, 0px)); }
 .thanks-card {
   background: var(--surface); border-radius: 18px; padding: clamp(34px, 6vw, 56px) 24px; color: #F7F5EF;
   max-width: 760px; margin: 0 auto; box-shadow: var(--shadow);
@@ -987,6 +1292,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
 @media (max-width: 900px) {
   /* the rail keeps one dot per chapter: labels would cover the text column */
   #rail { left: 6px; width: 22px; height: clamp(320px, 72vh, 660px); --rail-pad: 16px; }
+  #rail { left: 6px; width: 22px; height: clamp(320px, 72svh, 660px); --rail-pad: 16px; }
   #rail .rail-line, #rail .rail-fill { left: 10px; }
   #rail a { left: 0; width: 22px; height: 22px; }
   #rail .dot { width: 9px; height: 9px; border-width: 1.5px; }
@@ -1065,6 +1371,7 @@ body.tab-hidden .blob { animation-play-state: paused; }
    JS compactRail() so DOM order, layout and CSS agree */
 @media (max-height: 799px) and (min-width: 901px) {
   #rail { height: 88vh; --rail-pad: 12px; }
+  #rail { height: 88svh; --rail-pad: 12px; }
   #rail a.s-dot { display: none; }
 }
 /* `top: 50%` cannot see the fixed top bar: every hero-era dot used to be
