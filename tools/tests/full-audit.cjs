@@ -377,16 +377,16 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       return {
         exactOrder: JSON.stringify(sceneIds) === JSON.stringify(expectedIds),
         allJustified,
-        pdfOk: pdfRes.status === 200 && pdfBuf.byteLength === 921199,
+        pdfOk: pdfRes.status === 200 && pdfBuf.byteLength === 921399,
         zpdReady: window.__rail.zpd().pinned === true,
-        cacheSynced: cacheTags.every(t => t && t.includes('?v=20261023e'))
+        cacheSynced: cacheTags.every(t => t && t.includes('?v=20261024a'))
       };
     });
     ok(deckAudit.exactOrder, 'all 29 scenes (#s2..#s30) present in exact PDF order');
     ok(deckAudit.allJustified, 'every slide translation & original paragraph remains text-align: justify');
-    ok(deckAudit.pdfOk, 'assets/Mathematics-For-All.pdf serves 200 OK with exact 921,199 bytes');
+    ok(deckAudit.pdfOk, 'assets/Mathematics-For-All.pdf serves 200 OK with exact 921,399 bytes');
     ok(deckAudit.zpdReady, 'Slide 23 (#s23) ZPD ScrollTrigger pin active and healthy');
-    ok(deckAudit.cacheSynced, 'style.css, app.js, and summary.js share unified cache-buster ?v=20261023e');
+    ok(deckAudit.cacheSynced, 'style.css, app.js, and summary.js share unified cache-buster ?v=20261024a');
 
     /* Verify #hero velvet opening choreography, Bidi Latin run order, & zero resting GPU layers */
     await deckPage.waitForFunction(() => window.__heroMotion && !window.__heroMotion.stats().animating, { timeout: 4000 });
