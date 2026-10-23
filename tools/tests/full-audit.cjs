@@ -370,14 +370,14 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         allJustified,
         pdfOk: pdfRes.status === 200 && pdfBuf.byteLength === 921255,
         zpdReady: window.__rail.zpd().pinned === true,
-        cacheSynced: cacheTags.every(t => t && t.includes('?v=20261023c'))
+        cacheSynced: cacheTags.every(t => t && t.includes('?v=20261023d'))
       };
     });
     ok(deckAudit.exactOrder, 'all 29 scenes (#s2..#s30) present in exact PDF order');
     ok(deckAudit.allJustified, 'every slide translation & original paragraph remains text-align: justify');
     ok(deckAudit.pdfOk, 'assets/Mathematics-For-All.pdf serves 200 OK with exact 921,255 bytes');
     ok(deckAudit.zpdReady, 'Slide 23 (#s23) ZPD ScrollTrigger pin active and healthy');
-    ok(deckAudit.cacheSynced, 'style.css, app.js, and summary.js share unified cache-buster ?v=20261023c');
+    ok(deckAudit.cacheSynced, 'style.css, app.js, and summary.js share unified cache-buster ?v=20261023d');
 
     /* Verify A+ / A- / Theme buttons in main topbar */
     await deckPage.click('#fsUp');
@@ -390,6 +390,37 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     await deckPage.click('#themeToggle');
     await delay(100);
     ok(await deckPage.evaluate(() => ['dark', 'light'].includes(document.documentElement.getAttribute('data-theme'))), '#themeToggle toggles cleanly');
+
+    /* Verify directional soft-fade typing classes on #people person/tab switches + rapid Escape->Reopen->Back */
+    await deckPage.$eval('#portal .portal-card', e => e.scrollIntoView({ block: 'center', behavior: 'instant' }));
+    await delay(60);
+    await deckPage.click('#portal .portal-card');
+    await delay(850);
+    const pplWipeDirs = await deckPage.evaluate(() => {
+      document.querySelectorAll('.ppl-person')[1].click();
+      const pane = document.querySelectorAll('.ppl-pane')[1];
+      const nameEl = pane.querySelector('.ppl-name');
+      const latinEl = pane.querySelector('.ppl-latin');
+      const panelP = pane.querySelector('.ppl-panel.is-on .ppl-text p');
+      return {
+        nameRtl: nameEl.classList.contains('tw-wipe-rtl'),
+        latinLtr: latinEl.classList.contains('tw-wipe-ltr'),
+        proseStreaming: panelP.classList.contains('tw-play')
+      };
+    });
+    ok(pplWipeDirs.nameRtl && pplWipeDirs.latinLtr && pplWipeDirs.proseStreaming,
+      '#people person switch runs simultaneous RTL name wipe, LTR Latin wipe, and prose stream');
+
+    await deckPage.waitForFunction(() => window.__people.state().activeAnims === 0, { timeout: 2500 });
+    await deckPage.keyboard.press('Escape');
+    await delay(720);
+    /* Immediate re-open followed by browser Back (regression guard for restorePopY race) */
+    await deckPage.click('#portal .portal-card');
+    await delay(200);
+    await deckPage.goBack();
+    await delay(750);
+    ok(await deckPage.evaluate(() => !window.__people.isOpen()),
+      'rapid Escape -> Re-open -> Browser Back cleanly closes #people on first back');
 
     await deckPage.close();
     console.log(`PASS ${checks} full-site audit assertions`);

@@ -452,8 +452,92 @@ body.tab-hidden .blob { animation-play-state: paused; }
 /* scroll velocity gently stretches the blob layer, then it settles */
 .blobs { transform: scaleY(calc(1 + var(--vel, 0) * 0.045)); transform-origin: center 30%; }
 
-/* hero title word reveal (JS wraps words in .w) */
+/* hero title word reveal & directional soft-fade typing engine */
 .w { display: inline-block; will-change: transform, opacity, filter; }
+
+/* ---------------------------------------------------------------- 07b directional soft-fade typing reveal
+   Two zero-reflow primitives shared across deck, chapters, portals, #summary, & #people:
+     1) .tw-tok inside .tw-play: pure `display: inline` word tokens (0.00px layout or
+        text-align:justify shift, intact Persian ZWNJ & cursive shaping, infinite word
+        scalability with zero GPU mask-atlas cap) fading along natural inline reading
+        order (Right -> Left in Persian RTL, Left -> Right in English LTR) so 6–10
+        adjacent words form a continuous feathered horizontal opacity wave across each line.
+     2) .tw-wipe-rtl / .tw-wipe-ltr on short/single-word display headings (e.g. «نونگکسا»,
+        chapter h2, modal titles): single-element feathered lateral gradient ink wipe
+        with vertical bleed for B Nazanin ascenders/descenders, removed to `mask-image: none`
+        the instant the animation completes so steady-state scrolling uses 0 GPU masks. */
+.tw-tok { display: inline; }
+
+:root.js .tw-play .tw-tok {
+  animation: twTokenFade var(--tw-dur, 300ms) cubic-bezier(0.22, 1, 0.36, 1) var(--tw-d, 0ms) both;
+}
+:root.js .tw-play.tw-soft .tw-tok {
+  animation-name: twTokenFadeSoft;
+}
+
+@keyframes twTokenFade {
+  from { opacity: 0.02; }
+  to   { opacity: 1; }
+}
+@keyframes twTokenFadeSoft {
+  from { opacity: 0.14; }
+  to   { opacity: 1; }
+}
+
+:root.js .tw-wipe-rtl {
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, transparent 33.4%, #000 66.6%, #000 100%);
+  mask-image: linear-gradient(to right, transparent 0%, transparent 33.4%, #000 66.6%, #000 100%);
+  -webkit-mask-size: 300% 136%;
+  mask-size: 300% 136%;
+  -webkit-mask-position: 100% 50%;
+  mask-position: 100% 50%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  animation: twMaskRtl var(--tw-wdur, 460ms) cubic-bezier(0.22, 1, 0.36, 1) var(--tw-wdelay, 0ms) both;
+}
+
+:root.js .tw-wipe-ltr {
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 33.4%, transparent 66.6%, transparent 100%);
+  mask-image: linear-gradient(to right, #000 0%, #000 33.4%, transparent 66.6%, transparent 100%);
+  -webkit-mask-size: 300% 136%;
+  mask-size: 300% 136%;
+  -webkit-mask-position: 0% 50%;
+  mask-position: 0% 50%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  animation: twMaskLtr var(--tw-wdur, 460ms) cubic-bezier(0.22, 1, 0.36, 1) var(--tw-wdelay, 0ms) both;
+}
+
+@keyframes twMaskRtl {
+  from { opacity: 0.04; -webkit-mask-position: 0% 50%;   mask-position: 0% 50%; }
+  to   { opacity: 1;    -webkit-mask-position: 100% 50%; mask-position: 100% 50%; }
+}
+@keyframes twMaskLtr {
+  from { opacity: 0.04; -webkit-mask-position: 100% 50%; mask-position: 100% 50%; }
+  to   { opacity: 1;    -webkit-mask-position: 0% 50%;   mask-position: 0% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root.js .tw-play .tw-tok,
+  :root.js .tw-wipe-rtl,
+  :root.js .tw-wipe-ltr {
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
+
+@media print {
+  .tw-play .tw-tok,
+  .tw-wipe-rtl,
+  .tw-wipe-ltr {
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
 
 /* ---------------------------------------------------------------- 08 chapter dividers */
 .chapter {
@@ -1253,7 +1337,7 @@ html.ppl-lock { overflow: hidden; }
 }
 :root[data-theme="dark"] .thanks-card { background: var(--surface); }
 .thanks-fa { font-size: clamp(30px, 6vw, 44px); font-weight: 700; }
-.thanks-en { font-family: "Times New Roman", Times, serif; color: var(--on-surface-soft); font-size: clamp(16px, 3vw, 20px); margin-top: 10px; }
+.thanks-en { font-family: "Times New Roman", Times, serif; direction: ltr; color: var(--on-surface-soft); font-size: clamp(16px, 3vw, 20px); margin-top: 10px; }
 #closing .presenters { max-width: 760px; margin-left: auto; margin-right: auto; }
 #closing .btn-pdf { margin-top: 30px; }
 .colophon { margin-top: 44px; color: var(--ink-soft); font-size: 14.5px; font-weight: 700; }

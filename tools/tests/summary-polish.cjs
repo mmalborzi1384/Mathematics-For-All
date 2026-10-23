@@ -245,7 +245,56 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   }
   await hp.close();
 
-  /* 3. Strict source & PDF immutability check against git HEAD */
+  /* 3. Directional Soft-Fade Typing (window.__textStream) & Edge-Case Verification */
+  const twPage = await browser.newPage();
+  await twPage.setViewport({width: 1280, height: 860, deviceScaleFactor: 2});
+  await twPage.goto(process.env.BASE_URL || 'http://127.0.0.1:8000', {waitUntil: 'networkidle0'});
+  await twPage.evaluate(() => document.fonts.ready);
+
+  /* Wait for hero entrance streams to finish cleanly -> 0 lingering masks/streams at rest */
+  await twPage.waitForFunction(() => window.__textStream && window.__textStream.stats().active === 0, {timeout: 4000});
+  const restState = await twPage.evaluate(() => ({
+   stats: window.__textStream.stats(),
+   strayPlay: document.querySelectorAll('.tw-play, .tw-wipe-rtl, .tw-wipe-ltr').length,
+   basmalaMask: getComputedStyle(document.querySelector('#hero .basmala')).webkitMaskImage,
+   thanksEnLtr: window.__textStream.isLtr(document.querySelector('#closing .thanks-en')),
+   thanksFaRtl: !window.__textStream.isLtr(document.querySelector('#closing .thanks-fa'))
+  }));
+  ok(restState.stats.blocks > 100 && restState.stats.completed >= 3, 'window.__textStream initialized and completed hero streams');
+  ok(restState.strayPlay === 0 && restState.basmalaMask === 'none', 'zero lingering .tw-play or GPU mask-image after completion');
+  ok(restState.thanksEnLtr && restState.thanksFaRtl, 'tsIsLtr accurately distinguishes LTR English vs RTL Persian headings');
+
+  /* Deterministic mid-flight monotonic opacity gradient check on RTL Persian vs LTR English slide */
+  await twPage.$eval('#s2', el => el.scrollIntoView({block: 'center', behavior: 'instant'}));
+  const midWave = await twPage.evaluate(() => {
+   const fa = document.querySelector('#s2 .boxin-fa');
+   const en = document.querySelector('#s2 .boxin-en');
+   window.__textStream.stream(fa, {delay: 0, window: 600, duration: 240});
+   window.__textStream.stream(en, {delay: 0, window: 600, duration: 240});
+   for (const a of document.getAnimations()) {
+    if ((a.animationName || '').startsWith('twTokenFade')) {
+     a.pause();
+     a.currentTime = 220;
+    }
+   }
+   const faToks = [...fa.querySelectorAll('.tw-tok')];
+   const enToks = [...en.querySelectorAll('.tw-tok')];
+   const faStart = parseFloat(getComputedStyle(faToks[0]).opacity);
+   const faEnd = parseFloat(getComputedStyle(faToks[faToks.length - 1]).opacity);
+   const enStart = parseFloat(getComputedStyle(enToks[0]).opacity);
+   const enEnd = parseFloat(getComputedStyle(enToks[enToks.length - 1]).opacity);
+   /* Also test beforeprint immediate flush mid-animation */
+   window.dispatchEvent(new Event('beforeprint'));
+   const flushedActive = window.__textStream.stats().active;
+   const postFlushEnd = parseFloat(getComputedStyle(faToks[faToks.length - 1]).opacity);
+   return {faStart, faEnd, enStart, enEnd, flushedActive, postFlushEnd};
+  });
+  ok(midWave.faStart > 0.85 && midWave.faEnd < 0.15, `Persian RTL stream fades smoothly from start (${midWave.faStart.toFixed(2)}) to tail (${midWave.faEnd.toFixed(2)})`);
+  ok(midWave.enStart > 0.85 && midWave.enEnd < 0.15, `English LTR stream fades smoothly from start (${midWave.enStart.toFixed(2)}) to tail (${midWave.enEnd.toFixed(2)})`);
+  ok(midWave.flushedActive === 0 && midWave.postFlushEnd === 1, 'beforeprint immediately flushes active streams to opacity:1 with zero residual timers');
+  await twPage.close();
+
+  /* 4. Strict source & PDF immutability check against git HEAD */
   const pdfDiff = execSync('git diff --name-only assets/Mathematics-For-All.pdf').toString().trim();
   ok(pdfDiff === '', 'PDF binary 100% untouched');
 
