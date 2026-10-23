@@ -17,6 +17,7 @@
 
   var root = document.documentElement;
   var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var TS = window.__textStream || null;
   var FA = "۰۱۲۳۴۵۶۷۸۹";
   function toFa(n) {
     return String(n).replace(/[0-9]/g, function (d) { return FA[+d]; });
@@ -204,6 +205,7 @@
   }
 
   function cancelSummaryAnims() {
+    if (TS) TS.cancelIn(dialog);
     while (activeSummaryAnims.length) {
       var a = activeSummaryAnims.pop();
       try { a.cancel(); } catch (e) {}
@@ -287,6 +289,19 @@
   });
 
   if (head) head.appendChild(nav);
+
+  /* Pre-tokenize all prelude prose & list items synchronously at boot so
+     sheet.scrollHeight stays 0.00px constant across open, scroll, & resize. */
+  if (TS) {
+    if (head) {
+      var headLeadP = head.querySelector(":scope > p");
+      if (headLeadP) TS.prepare(headLeadP);
+      if (citeAuthor) TS.prepare(citeAuthor);
+    }
+    cards.forEach(function (c) {
+      c.querySelectorAll(":scope > p, :scope > ul > li, :scope > ol > li").forEach(TS.prepare);
+    });
+  }
 
   status.addEventListener("click", function () {
     glideSheetTo(0, 480);
@@ -456,12 +471,25 @@
       ], { duration: 420, delay: d0 + 25, easing: EASE_OUT });
     }
 
+    var cardH3 = card.querySelector("h3");
+    if (TS && cardH3) {
+      TS.wipe(cardH3, { delay: d0 + 10, duration: 400 });
+    }
+
     var blocks = Array.prototype.slice.call(card.querySelectorAll(":scope > p, :scope > ul > li, :scope > ol > li"));
     blocks.forEach(function (el, idx) {
       runSummaryAnim(el, [
-        { opacity: 0.66, transform: "translateY(9px)" },
+        { opacity: 0.66, transform: "translateY(8px)" },
         { opacity: 1, transform: "translateY(0)" }
-      ], { duration: 360, delay: d0 + Math.min(idx, 5) * 28, easing: EASE_OUT, fill: "backwards" });
+      ], { duration: 350, delay: d0 + Math.min(idx, 5) * 26, easing: EASE_OUT, fill: "backwards" });
+      if (TS) {
+        TS.stream(el, {
+          delay: d0 + Math.min(idx, 4) * 40,
+          window: 390,
+          duration: 255,
+          soft: true
+        });
+      }
     });
 
     var nodes = Array.prototype.slice.call(card.querySelectorAll(".sum-arc-node, .sum-triad-item"));
@@ -506,6 +534,12 @@
           { opacity: 1, transform: "translateY(0)" }
         ], { duration: 450, delay: 75 + idx * 45, easing: EASE_OUT, fill: "backwards" });
       });
+      if (TS) {
+        if (titleH2) TS.wipe(titleH2, { delay: 80, duration: 450 });
+        if (subP) TS.stream(subP, { delay: 130, window: 410, duration: 260, soft: true });
+        if (citeH3) TS.wipe(citeH3, { delay: 170, duration: 420 });
+        if (citeAuthor) TS.stream(citeAuthor, { delay: 200, window: 300, duration: 250, soft: true });
+      }
       if (citeEl) {
         runSummaryAnim(citeEl, [
           { opacity: 0, transform: "translateY(15px)" },
@@ -618,6 +652,7 @@
 
     var wasClosing = closing;
     closing = false;
+    restorePopY = null;
     if (!wasClosing) savedY = window.scrollY || root.scrollTop || 0;
 
     dialog.classList.remove("is-settled", "is-open");
@@ -720,12 +755,13 @@
   });
 
   window.addEventListener("popstate", function () {
-    if (restorePopY !== null && location.hash !== "#summary") {
+    if (restorePopY !== null && (closing || !dialog.open) && location.hash !== "#summary") {
       var y = restorePopY;
       restorePopY = null;
       if (!closing && !dialog.open) window.scrollTo({ top: y, behavior: "instant" });
       return;
     }
+    restorePopY = null;
     if (location.hash === "#summary") open(false);
     else close(true);
   });
@@ -766,7 +802,7 @@
         open: dialog.open,
         settled: dialog.classList.contains("is-settled"),
         gliding: !!sheetGlideRAF,
-        activeAnims: activeSummaryAnims.length,
+        activeAnims: activeSummaryAnims.length + (TS ? TS.countIn(dialog) : 0),
         revealedCards: revealedCount,
         scrollTop: Math.round(sheet.scrollTop),
         scrollHeight: Math.round(sheet.scrollHeight),
