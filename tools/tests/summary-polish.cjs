@@ -78,9 +78,10 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
     /* Real screenshot pixel variance check at y=1850: proves bottom half of screen actually paints content! */
     if (targetY === 1850) {
+     const vy = await page.evaluate(() => scrollY);
      const b64 = await page.screenshot({
       encoding: 'base64',
-      clip: {x: 0, y: Math.round((width < 500 ? 844 : 900) * 0.45), width, height: 260}
+      clip: {x: 0, y: vy + Math.round((width < 500 ? 844 : 900) * 0.45), width, height: 260}
      });
      ok(Buffer.from(b64, 'base64').length > 8000, `rich rendered pixels in lower viewport at ${width} y=1850`);
     }
@@ -169,6 +170,79 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   await hp.waitForFunction(() => !document.getElementById('people').classList.contains('is-mounted'), {timeout: 3000});
   await delay(120);
   ok(Math.abs((await hp.evaluate(() => scrollY)) - pplSavedY) <= 2, 'history.back with prior #ch2 restores exact people savedY');
+
+  /* 2b. Deep stress audit of #people («سه زندگی»):
+     - instant early fast-scroll down at 120ms / 260ms / 600ms / settled shows 0 main-page pixels
+     - Top-Layer <dialog open> active + main page visibility: hidden while modal-settled
+     - 0px reflow on mobile URL-bar height change
+     - ArrowLeft / ArrowRight inside #people never jumps main deck scrollY
+     - 0px panel/pane clipping across all 3 people x 3 tabs on mobile (320, 390) & desktop (1440) */
+  await hp.click('#portal .portal-card');
+  await delay(80);
+  await hp.evaluate(() => new Promise(resolve => {
+   const s = document.querySelector('.ppl-sheet');
+   s.scrollTop = s.scrollHeight;
+   requestAnimationFrame(() => requestAnimationFrame(resolve));
+  }));
+  const fastEarly = await hp.evaluate(() => {
+   const sec = document.getElementById('people');
+   const low = document.elementFromPoint(195, 810);
+   const corner = document.elementFromPoint(20, 830);
+   return {
+    topLayerOpen: sec.tagName === 'DIALOG' && sec.open === true,
+    settled: sec.classList.contains('is-settled'),
+    clip: getComputedStyle(sec).clipPath,
+    mainHidden: getComputedStyle(document.querySelector('main')).visibility === 'hidden',
+    closingHidden: getComputedStyle(document.getElementById('closing')).visibility === 'hidden',
+    lowInside: !!(low && sec.contains(low)),
+    cornerInside: !!(corner && sec.contains(corner))
+   };
+  });
+  ok(fastEarly.topLayerOpen, '#people opens in native browser Top Layer (<dialog>)');
+  ok(fastEarly.settled && fastEarly.clip === 'none', '#people immediately drops clip-path on fast downward scroll');
+  ok(fastEarly.mainHidden && fastEarly.closingHidden, '#people hides underlying main deck & #closing in GPU tree');
+  ok(fastEarly.lowInside && fastEarly.cornerInside, 'zero main-page bleed on immediate fast downward scroll in #people');
+
+  /* Mobile URL-bar dynamic height change inside #people causes 0px reflow */
+  await hp.$eval('.ppl-sheet', s => { s.scrollTop = 420; });
+  await delay(30);
+  const pplBeforeH = await hp.$eval('.ppl-sheet', s => ({top: s.scrollTop, h: s.scrollHeight}));
+  await hp.setViewport({width: 390, height: 756, isMobile: true, hasTouch: true});
+  await delay(100);
+  const pplAfterH = await hp.$eval('.ppl-sheet', s => ({top: s.scrollTop, h: s.scrollHeight}));
+  ok(pplAfterH.top === pplBeforeH.top && pplAfterH.h === pplBeforeH.h, '#people mobile toolbar resize causes 0px reflow');
+
+  /* Arrow keys while #people is open must never scroll the main page behind it */
+  const lockedY = await hp.evaluate(() => scrollY);
+  await hp.keyboard.press('ArrowLeft');
+  await hp.keyboard.press('ArrowRight');
+  await delay(80);
+  ok((await hp.evaluate(() => scrollY)) === lockedY, 'Arrow keys inside #people never move main deck scrollY');
+
+  /* All 27 width x person x tab states have 0px clipping */
+  for (const w of [320, 390, 1440]) {
+   await hp.setViewport({width: w, height: 844, deviceScaleFactor: 2});
+   await delay(150);
+   for (let i = 0; i < 3; i++) {
+    await hp.evaluate(idx => document.querySelectorAll('.ppl-person')[idx].click(), i);
+    for (let j = 0; j < 3; j++) {
+     await hp.evaluate((idx, tIdx) => document.querySelectorAll('.ppl-pane')[idx].querySelectorAll('.ppl-tab')[tIdx].click(), i, j);
+     await delay(560);
+     const st = await hp.evaluate((idx, tIdx) => {
+      const pane = document.querySelectorAll('.ppl-pane')[idx];
+      const body = pane.querySelector('[data-ppl-body]');
+      const panel = pane.querySelectorAll('.ppl-panel')[tIdx];
+      const stage = document.querySelector('.ppl-stage');
+      return {
+       panelClipped: panel.scrollHeight > body.clientHeight + 2,
+       paneClipped: pane.offsetHeight > stage.clientHeight + 2,
+       overflowX: document.querySelector('.ppl-sheet').scrollWidth > document.querySelector('.ppl-sheet').clientWidth
+      };
+     }, i, j);
+     ok(!st.panelClipped && !st.paneClipped && !st.overflowX, `zero clipping/overflow in #people w=${w} p=${i} t=${j}`);
+    }
+   }
+  }
   await hp.close();
 
   /* 3. Strict source & PDF immutability check against git HEAD */

@@ -720,7 +720,7 @@
   });
 
   document.addEventListener("keydown", function (e) {
-    if (e.metaKey || e.ctrlKey || e.altKey || root.classList.contains("summary-lock")) return;
+    if (e.metaKey || e.ctrlKey || e.altKey || root.classList.contains("summary-lock") || root.classList.contains("ppl-lock")) return;
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     var t = e.target;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
@@ -894,11 +894,13 @@
     var sheet = sec.querySelector("[data-ppl-scroll]");
     var portal = document.querySelector("[data-ppl-open]");
     var closers = Array.prototype.slice.call(sec.querySelectorAll("[data-ppl-close]"));
-    var behind = Array.prototype.slice.call(document.querySelectorAll("main, .topbar, #rail, #toTop"));
+    var behind = Array.prototype.slice.call(document.querySelectorAll("main, .topbar, #rail, #closing, #toTop"));
     var isOpen = false, savedY = 0, lastFocus = null, pushed = false;
-    var closeTimer = 0, settleTimer = 0, restorePopY = null, openedAt = 0;
+    var closeTimer = 0, settleTimer = 0, enterTimer = 0, restorePopY = null, openedAt = 0;
+    var hasModal = typeof sec.showModal === "function";
 
     function behindInert(on) {
+      if (hasModal) return;
       behind.forEach(function (el) {
         if (!el) return;
         if ("inert" in el) el.inert = on;
@@ -907,20 +909,34 @@
       });
     }
 
-    function computeOrigin() {
+    function computeOrigin(recenterFromCard) {
       var W = window.innerWidth, H = window.innerHeight;
-      var cx = W / 2, cy = H * 0.42, hub = portal && portal.querySelector(".portal-hub");
-      if (hub) {
-        var r = hub.getBoundingClientRect();
-        if (r.width && r.height && r.bottom > 0 && r.top < H && r.right > 0 && r.left < W) {
-          cx = r.left + r.width / 2;
-          cy = r.top + r.height / 2;
+      var cx = parseFloat(sec.style.getPropertyValue("--ppl-ox"));
+      var cy = parseFloat(sec.style.getPropertyValue("--ppl-oy"));
+      if (recenterFromCard || !isFinite(cx) || !isFinite(cy)) {
+        cx = W / 2; cy = H * 0.42;
+        var hub = portal && portal.querySelector(".portal-hub");
+        if (hub) {
+          var r = hub.getBoundingClientRect();
+          if (r.width && r.height && r.bottom > 0 && r.top < H && r.right > 0 && r.left < W) {
+            cx = r.left + r.width / 2;
+            cy = r.top + r.height / 2;
+          }
         }
+        sec.style.setProperty("--ppl-ox", cx.toFixed(1) + "px");
+        sec.style.setProperty("--ppl-oy", cy.toFixed(1) + "px");
       }
-      var reach = Math.ceil(Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy))) + 28;
-      sec.style.setProperty("--ppl-ox", cx.toFixed(1) + "px");
-      sec.style.setProperty("--ppl-oy", cy.toFixed(1) + "px");
+      var reach = Math.ceil(Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy))) + 44;
       sec.style.setProperty("--ppl-r", reach + "px");
+    }
+
+    function settlePeople() {
+      clearTimeout(settleTimer);
+      clearTimeout(enterTimer);
+      sec.classList.remove("is-entering");
+      if (!isOpen) return;
+      sec.classList.add("is-settled");
+      root.classList.add("modal-settled");
     }
 
     function open(opts) {
@@ -931,32 +947,28 @@
       savedY = window.scrollY || root.scrollTop || 0;
       clearTimeout(closeTimer);
       clearTimeout(settleTimer);
+      clearTimeout(enterTimer);
 
-      sec.classList.remove("is-settled");
-      computeOrigin();
+      sec.classList.remove("is-settled", "is-open");
+      computeOrigin(true);
 
       root.classList.add("ppl-lock");
       sec.classList.add("is-mounted");
       sec.removeAttribute("aria-hidden");
       if ("inert" in sec) sec.inert = false;
       sec.removeAttribute("inert");
+      if (hasModal && !sec.open) sec.showModal();
       behindInert(true);
       if (sheet) sheet.scrollTop = 0;
 
-      refit(true);                       /* it has layout for the first time */
+      syncInkImmediate();
       sec.classList.add("is-entering");
       void sec.offsetHeight;
-      requestAnimationFrame(function () { if (isOpen) sec.classList.add("is-open"); });
-      settleTimer = setTimeout(function () {
-        if (isOpen) sec.classList.add("is-settled");
-      }, reduced() ? 0 : 860);
-      setTimeout(function () { sec.classList.remove("is-entering"); }, 1250);
+      sec.classList.add("is-open");
+      settleTimer = setTimeout(settlePeople, reduced() ? 0 : 700);
 
       setTimeout(function () {
         if (!isOpen) return;
-        /* focus the sheet, not the button: the dialog owns the keystrokes
-           from the first moment, without painting a focus ring on a button
-           nobody touched yet. Tab reaches «بازگشت به فصل» next. */
         var target = sheet || sec.querySelector(".ppl-back");
         if (target) target.focus({ preventScroll: true });
       }, 70);
@@ -973,7 +985,9 @@
       if (!isOpen) return;
       isOpen = false;
       clearTimeout(settleTimer);
-      computeOrigin();
+      clearTimeout(enterTimer);
+      root.classList.remove("modal-settled");
+      computeOrigin(false);
       sec.classList.remove("is-settled", "is-entering");
       void sec.offsetHeight;
       requestAnimationFrame(function () { sec.classList.remove("is-open"); });
@@ -985,9 +999,12 @@
       scrollNow(savedY);                 /* exact, and never animated */
       scheduleLayout();
       clearTimeout(closeTimer);
-      /* the wipe is .82s; leaving is-mounted on a little longer keeps the
-         last frames of the circle from being cut off */
-      closeTimer = setTimeout(function () { if (!isOpen) sec.classList.remove("is-mounted", "is-open"); }, reduced() ? 0 : 900);
+      closeTimer = setTimeout(function () {
+        if (!isOpen) {
+          sec.classList.remove("is-mounted", "is-open");
+          if (hasModal && sec.open) sec.close();
+        }
+      }, reduced() ? 0 : 680);
 
       if (pushed && !fromHistory) {
         pushed = false;
@@ -1003,6 +1020,28 @@
       }
       lastFocus = null;
     }
+
+    /* If the user immediately flings/scrolls before the .68s circle reveal finishes,
+       settle instantly on the very first gesture/scroll event so clip-path drops
+       and the underlying deck is hidden before a single scrolled frame paints. */
+    function onEarlyScroll() {
+      if (isOpen && !sec.classList.contains("is-settled")) settlePeople();
+    }
+    if (sheet) {
+      sheet.addEventListener("touchmove", onEarlyScroll, { passive: true });
+      sheet.addEventListener("wheel", onEarlyScroll, { passive: true });
+      sheet.addEventListener("scroll", onEarlyScroll, { passive: true });
+    }
+    sec.addEventListener("cancel", function (e) {
+      e.preventDefault();
+      close(false);
+    });
+    window.addEventListener("beforeprint", function () {
+      if (isOpen && hasModal && sec.open) sec.close();
+    });
+    window.addEventListener("afterprint", function () {
+      if (isOpen && hasModal && !sec.open) sec.showModal();
+    });
 
     if (portal) {
       portal.addEventListener("click", function (e) {
@@ -1075,14 +1114,36 @@
                             (t.offsetTop + t.offsetHeight - 3) + "px)";
     }
 
-    /* give a pane's body the height of its active panel; return the height the
-       pane itself must therefore take on the stage */
-    function sizePane(pane) {
-      var body = bodyOf(pane), panel = activePanel(pane);
-      var h = panel ? panel.offsetHeight : 0;
-      var chrome = chromeOf(pane);
-      if (body) body.style.height = h + "px";
-      return chrome + h;
+    var heightTimers = new WeakMap();
+    function tweenHeight(el, applyChange, ms) {
+      if (!el || reduced()) { applyChange(); if (el) el.style.height = ""; return; }
+      clearTimeout(heightTimers.get(el));
+      var fromH = el.offsetHeight;
+      el.style.height = "";
+      applyChange();
+      var toH = el.offsetHeight;
+      if (!fromH || Math.abs(toH - fromH) < 2) { el.style.height = ""; return; }
+      sec.classList.add(NOFX);
+      el.style.height = fromH + "px";
+      void el.offsetHeight;
+      sec.classList.remove(NOFX);
+      el.style.height = toH + "px";
+      heightTimers.set(el, setTimeout(function () {
+        el.style.height = "";
+      }, ms || 520));
+    }
+
+    function syncInkImmediate() {
+      sec.classList.add(NOFX);
+      stage.style.height = "";
+      panes.forEach(function (pane) {
+        var b = bodyOf(pane);
+        if (b) b.style.height = "";
+      });
+      moveInk();
+      panes.forEach(moveTabInk);
+      void stage.offsetHeight;
+      requestAnimationFrame(function () { sec.classList.remove(NOFX); });
     }
 
     function touch() { lastTouch = Date.now(); }
@@ -1107,19 +1168,21 @@
     function showPane(i) {
       cur = i;
       touch();
-      sec.classList.remove("is-entering");   /* the entrance is over the moment the reader takes over */
-      persons.forEach(function (b, k) {
-        b.setAttribute("aria-selected", k === i ? "true" : "false");
-        b.tabIndex = k === i ? 0 : -1;
-      });
-      panes.forEach(function (p, k) {
-        p.classList.toggle("is-on", k === i);
-        setHidden(p, k !== i);
-      });
+      sec.classList.remove("is-entering");
+      tweenHeight(stage, function () {
+        persons.forEach(function (b, k) {
+          b.setAttribute("aria-selected", k === i ? "true" : "false");
+          b.tabIndex = k === i ? 0 : -1;
+        });
+        panes.forEach(function (p, k) {
+          var b = bodyOf(p);
+          if (b) b.style.height = "";
+          p.classList.toggle("is-on", k === i);
+          setHidden(p, k !== i);
+        });
+      }, 520);
       moveInk();
-      var h = sizePane(panes[i]);
       panes.forEach(moveTabInk);
-      stage.style.height = h + "px";
     }
 
     function selectTab(pane, k) {
@@ -1128,48 +1191,43 @@
       if (!tabs.length || k < 0 || k >= tabs.length) return;
       touch();
       sec.classList.remove("is-entering");
-      lastTab[panes.indexOf(pane)] = k;
-      tabs.forEach(function (b, j) {
-        b.setAttribute("aria-selected", j === k ? "true" : "false");
-        b.tabIndex = j === k ? 0 : -1;
-      });
-      Array.prototype.forEach.call(panels, function (p, j) {
-        p.classList.toggle("is-on", j === k);
-        setHidden(p, j !== k);
-      });
+      var body = bodyOf(pane);
+      var applyTabs = function () {
+        lastTab[panes.indexOf(pane)] = k;
+        tabs.forEach(function (b, j) {
+          b.setAttribute("aria-selected", j === k ? "true" : "false");
+          b.tabIndex = j === k ? 0 : -1;
+        });
+        Array.prototype.forEach.call(panels, function (p, j) {
+          p.classList.toggle("is-on", j === k);
+          setHidden(p, j !== k);
+        });
+      };
+      if (pane === panes[cur] && body) {
+        stage.style.height = "";
+        tweenHeight(body, applyTabs, 480);
+      } else {
+        applyTabs();
+      }
       moveTabInk(pane);
-      var h = sizePane(pane);
-      if (pane === panes[cur]) stage.style.height = h + "px";
     }
 
-    /* fonts, A+/A−, theme, resize — measured with all transitions disabled.
-       A closed view has no layout (display:none), so measuring it would
-       write zeros over every height; the first open measures instead. */
+    var lastRefitW = window.innerWidth;
     function refit(force) {
       if (!isOpen && !force) return;
-      if (!force && Date.now() - lastTouch < 640) { setTimeout(function () { refit(force); }, 660); return; }
-      sec.classList.add(NOFX);
-      var h = 0;
-      panes.forEach(function (pane) {
-        var body = bodyOf(pane), panel = activePanel(pane);
-        if (body) body.style.height = (panel ? panel.offsetHeight : 0) + "px";
-      });
-      panes.forEach(function (pane) {      /* one layout pass, then measure */
-        if (pane === panes[cur]) h = chromeOf(pane) + (activePanel(pane) ? activePanel(pane).offsetHeight : 0);
-        else sizePane(pane);
-      });
-      if (!h) h = sizePane(panes[cur]);
-      stage.style.height = h + "px";
-      moveInk();
-      panes.forEach(moveTabInk);
-      void stage.offsetHeight;
-      requestAnimationFrame(function () { sec.classList.remove(NOFX); });
+      syncInkImmediate();
     }
 
     var refitTimer = 0;
     function scheduleRefit() {
+      if (!isOpen) return;
+      computeOrigin(false);
+      /* Mobile URL bar hiding/showing only changes innerHeight: skip layout sync
+         completely during vertical scroll and only re-position indicators if width changed! */
+      if (window.innerWidth === lastRefitW) return;
+      lastRefitW = window.innerWidth;
       clearTimeout(refitTimer);
-      refitTimer = setTimeout(function () { refit(); }, 120);
+      refitTimer = setTimeout(syncInkImmediate, 90);
     }
 
     /* click + keyboard for both tablists (RTL: left arrow moves forward) */
@@ -1226,12 +1284,13 @@
     requestAnimationFrame(function () { sec.classList.add("ppl-live"); });
 
     window.addEventListener("resize", scheduleRefit);
-    window.addEventListener("load", scheduleRefit);
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", scheduleRefit);
+    window.addEventListener("load", function () { if (isOpen) syncInkImmediate(); });
     if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(function () { setTimeout(function () { refit(); }, 80); });
+      document.fonts.ready.then(function () { if (isOpen) syncInkImmediate(); });
     }
     if (window.MutationObserver) {
-      new MutationObserver(scheduleRefit)
+      new MutationObserver(function () { if (isOpen) setTimeout(syncInkImmediate, 40); })
         .observe(document.documentElement, { attributes: true, attributeFilter: ["data-fs", "data-theme"] });
     }
 
