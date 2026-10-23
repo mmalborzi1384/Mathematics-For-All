@@ -97,7 +97,10 @@
   var toTop = document.getElementById("toTop");
   if (toTop) {
     toTop.addEventListener("click", function () {
-      window.scrollTo({ top: 0, behavior: reduced() ? "auto" : "smooth" });
+      /* same rule as the rail: a long hop is instant, a short one glides —
+         a 45 000px smooth scroll is a three-second blur, not a courtesy */
+      if (reduced() || (window.scrollY || 0) > window.innerHeight * 2.5) scrollNow(0);
+      else window.scrollTo({ top: 0, behavior: "smooth" });
     });
   }
 
@@ -140,7 +143,7 @@
 
   var navState = { chapter: "hero", scene: null };
   var zones = [];
-  document.querySelectorAll("#hero, .chapter, .scene, #people, #closing").forEach(function (el) {
+  document.querySelectorAll("#hero, .chapter, .scene, #closing").forEach(function (el) {
     if (el.classList.contains("scene")) zones.push({ el: el, chapter: el.getAttribute("data-chapter"), scene: el.id });
     else zones.push({ el: el, chapter: el.id, scene: null });
   });
@@ -438,6 +441,16 @@
   var zpdWrap = document.querySelector(".zpd-wrap");
   if (zpdWrap && window.gsap && window.ScrollTrigger) {
     gsap.registerPlugin(ScrollTrigger);
+    /* The mobile URL bar hides on every scroll-down and shows again on
+       every scroll-up. ScrollTrigger treats that as a resize, re-measures
+       the pin and rewrites the pin spacer — the document gets taller, and
+       the browser clamps or snaps scrollY under the reader's finger. That
+       was the jump at the end of the page. Small height-only changes on a
+       touch device are now ignored; a real resize (orientation, keyboard,
+       desktop window) still refreshes. */
+    try {
+      ScrollTrigger.config({ ignoreMobileResize: true });
+    } catch (e) {}
     var zpdStage = zpdWrap.querySelector(".zpd-stage");
     var zpdSteps = zpdWrap.querySelectorAll(".zpd-steps span");
     function zpdStepPaint(p) {
@@ -545,10 +558,14 @@
   var bar = document.getElementById("progress");
   var ticking = false, lastProgress = 0;
 
+  /* the last measured geometry, so a resize can tell whether the reader
+     was standing at the very bottom before the layout changed */
+  var lastY = 0, lastVH = window.innerHeight, lastDocH = root.scrollHeight;
   function onScroll(force) {
     ticking = false;
     var y = window.scrollY || root.scrollTop || 0;
     var max = maxScroll();
+    lastY = y; lastVH = window.innerHeight; lastDocH = root.scrollHeight;
     var p = clamp01(y / max);
     lastProgress = p;
     if (bar) bar.style.transform = "scaleX(" + p.toFixed(5) + ")";
@@ -571,9 +588,33 @@
     scrollFallback = setTimeout(function () { if (ticking) onScroll(false); }, 140);
   }
   window.addEventListener("scroll", requestScroll, { passive: true });
-  window.addEventListener("resize", function () { requestScroll(); scheduleLayout(); });
+  /* A viewport that changes height (mobile URL bar, on-screen keyboard,
+     a rotated phone) changes the height of everything measured in svh and
+     the length of the document with it. If the reader was standing on the
+     last pixel, that used to leave them short of the bottom — the page had
+     quietly moved under them, and the next scroll down "jumped". The bottom
+     is now an anchor: same place before and after the change. */
+  function onViewportChange() {
+    var atBottom = lastY + lastVH >= lastDocH - 4;
+    var yNow = window.scrollY || 0;
+    requestScroll();
+    scheduleLayout();
+    if (!atBottom || root.classList.contains("ppl-lock")) return;
+    /* the layout lands a frame or two later (and once more when webfonts or
+       a lazy image settle), so the anchor is checked twice — but only while
+       the reader has not scrolled away from where they were */
+    function reanchor() {
+      if (root.classList.contains("ppl-lock")) return;
+      if (Math.abs((window.scrollY || 0) - yNow) > 2) return;   /* the reader moved */
+      var max = maxScroll();
+      if (Math.abs((window.scrollY || 0) - max) > 2) scrollNow(max);
+    }
+    requestAnimationFrame(reanchor);
+    setTimeout(reanchor, 240);
+  }
+  window.addEventListener("resize", onViewportChange);
   if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", function () { requestScroll(); scheduleLayout(); });
+    window.visualViewport.addEventListener("resize", onViewportChange);
   }
 
   var illustrationsReady = false;
@@ -662,10 +703,12 @@
   }
 
   /* ---------------------------------------------------------------- keyboard: chapters */
-  var stops = ["hero", "ch1", "ch2", "ch3", "ch4", "ch5", "people", "closing"];
+  var stops = ["hero", "ch1", "ch2", "ch3", "ch4", "ch5", "closing"];
   document.addEventListener("click", function (e) {
     var a = e.target.closest ? e.target.closest('a[href^="#"]') : null;
     if (!a || a.classList.contains("skip")) return;
+    /* the dossier trigger is a door, not an anchor: the people module owns it */
+    if (a.hasAttribute("data-ppl-open")) return;
     var id = a.getAttribute("href").slice(1);
     if (!id || !document.getElementById(id)) return;
     e.preventDefault();
@@ -838,6 +881,151 @@
     var lastTouch = 0;
     var NOFX = "ppl-nofx";
 
+    /* ---- the door ------------------------------------------------------
+       #people is a full-screen view, not a section: it is mounted on
+       demand, measured while it is laid out, and taken back out of the
+       document when it closes. The page underneath is locked, keeps its
+       scroll offset to the pixel, and is made inert so focus and a screen
+       reader can only see the view. */
+    var sheet = sec.querySelector("[data-ppl-scroll]");
+    var portal = document.querySelector("[data-ppl-open]");
+    var closers = Array.prototype.slice.call(sec.querySelectorAll("[data-ppl-close]"));
+    var behind = Array.prototype.slice.call(document.querySelectorAll("main, .topbar, #rail, #toTop"));
+    var isOpen = false, savedY = 0, lastFocus = null, pushed = false;
+    var closeTimer = 0, openedAt = 0;
+
+    function behindInert(on) {
+      behind.forEach(function (el) {
+        if (!el) return;
+        if ("inert" in el) el.inert = on;
+        else if (on) el.setAttribute("inert", "");
+        else el.removeAttribute("inert");
+      });
+    }
+
+    function open(opts) {
+      if (isOpen) return;
+      isOpen = true;
+      openedAt = Date.now();
+      lastFocus = document.activeElement;
+      savedY = window.scrollY || root.scrollTop || 0;
+      clearTimeout(closeTimer);
+
+      /* the wipe grows out of the hub of the card that was just pressed —
+         but only if that hub is on screen (a deep link, or an open() from
+         the console, has no card to grow from: then it starts centred) */
+      var W = window.innerWidth, H = window.innerHeight;
+      var cx = W / 2, cy = H * 0.42, hub = portal && portal.querySelector(".portal-hub");
+      if (hub) {
+        var r = hub.getBoundingClientRect();
+        if (r.width && r.height && r.bottom > 0 && r.top < H && r.right > 0 && r.left < W) {
+          cx = r.left + r.width / 2;
+          cy = r.top + r.height / 2;
+        }
+      }
+      /* a radius that always reaches the furthest corner, so the last frame
+         of the wipe is the full screen and never a clipped circle */
+      var reach = Math.ceil(Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy))) + 24;
+      sec.style.setProperty("--ppl-ox", cx.toFixed(1) + "px");
+      sec.style.setProperty("--ppl-oy", cy.toFixed(1) + "px");
+      sec.style.setProperty("--ppl-r", reach + "px");
+
+      root.classList.add("ppl-lock");
+      sec.classList.add("is-mounted");
+      sec.removeAttribute("aria-hidden");
+      if ("inert" in sec) sec.inert = false;
+      sec.removeAttribute("inert");
+      behindInert(true);
+      if (sheet) sheet.scrollTop = 0;
+
+      refit(true);                       /* it has layout for the first time */
+      sec.classList.add("is-entering");
+      void sec.offsetHeight;
+      requestAnimationFrame(function () { if (isOpen) sec.classList.add("is-open"); });
+      setTimeout(function () { sec.classList.remove("is-entering"); }, 1250);
+
+      setTimeout(function () {
+        if (!isOpen) return;
+        /* focus the sheet, not the button: the dialog owns the keystrokes
+           from the first moment, without painting a focus ring on a button
+           nobody touched yet. Tab reaches «بازگشت به فصل» next. */
+        var target = sheet || sec.querySelector(".ppl-back");
+        if (target) target.focus({ preventScroll: true });
+      }, 70);
+
+      pushed = false;
+      if (!opts || !opts.silent) {
+        try {
+          if (history.pushState) { history.pushState({ mfaPeople: 1 }, "", "#people"); pushed = true; }
+        } catch (e) { pushed = false; }
+      }
+    }
+
+    function close(fromHistory) {
+      if (!isOpen) return;
+      isOpen = false;
+      sec.classList.remove("is-open", "is-entering");
+      sec.setAttribute("aria-hidden", "true");
+      if ("inert" in sec) sec.inert = true;
+      else sec.setAttribute("inert", "");
+      behindInert(false);
+      root.classList.remove("ppl-lock");
+      scrollNow(savedY);                 /* exact, and never animated */
+      clearTimeout(closeTimer);
+      /* the wipe is .82s; leaving is-mounted on a little longer keeps the
+         last frames of the circle from being cut off */
+      closeTimer = setTimeout(function () { if (!isOpen) sec.classList.remove("is-mounted"); }, 900);
+
+      if (pushed && !fromHistory) {
+        pushed = false;
+        try { history.back(); } catch (e) {}
+      } else if (!pushed && location.hash === "#people") {
+        try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
+      }
+      pushed = false;
+
+      if (lastFocus && lastFocus.focus) {
+        try { lastFocus.focus({ preventScroll: true }); } catch (e) {}
+      }
+      lastFocus = null;
+    }
+
+    if (portal) {
+      portal.addEventListener("click", function (e) {
+        e.preventDefault();
+        open();
+      });
+    }
+    closers.forEach(function (b) {
+      b.addEventListener("click", function () { close(false); });
+    });
+    window.addEventListener("popstate", function () {
+      if (!isOpen) return;
+      if (Date.now() - openedAt < 450) return;   /* the close's own history.back() */
+      close(true);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (!isOpen) return;
+      if (e.key === "Escape" || e.key === "Esc") { e.preventDefault(); close(false); return; }
+      if (e.key !== "Tab") return;
+      /* a modal keeps Tab inside itself: the deck behind is inert, but the
+         hidden panes and panels are filtered out as well */
+      var all = sec.querySelectorAll('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])');
+      var list = Array.prototype.filter.call(all, function (el) {
+        return el.offsetParent !== null && !el.closest('[aria-hidden="true"]');
+      });
+      if (!list.length) return;
+      var first = list[0], last = list[list.length - 1];
+      var at = list.indexOf(document.activeElement);   /* -1: the sheet itself */
+      if (e.shiftKey && at <= 0) {
+        e.preventDefault(); last.focus({ preventScroll: true });
+      } else if (!e.shiftKey && (at === list.length - 1 || at === -1)) {
+        e.preventDefault(); first.focus({ preventScroll: true });
+      }
+    });
+    /* a shared link that ends in #people opens the view */
+    if (location.hash === "#people") open({ silent: true });
+
     function bodyOf(pane) { return pane.querySelector("[data-ppl-body]"); }
     function panelsOf(pane) { return pane.querySelectorAll(".ppl-panel"); }
     function activePanel(pane) {
@@ -899,6 +1087,7 @@
     function showPane(i) {
       cur = i;
       touch();
+      sec.classList.remove("is-entering");   /* the entrance is over the moment the reader takes over */
       persons.forEach(function (b, k) {
         b.setAttribute("aria-selected", k === i ? "true" : "false");
         b.tabIndex = k === i ? 0 : -1;
@@ -918,6 +1107,7 @@
       var panels = panelsOf(pane);
       if (!tabs.length || k < 0 || k >= tabs.length) return;
       touch();
+      sec.classList.remove("is-entering");
       lastTab[panes.indexOf(pane)] = k;
       tabs.forEach(function (b, j) {
         b.setAttribute("aria-selected", j === k ? "true" : "false");
@@ -932,9 +1122,12 @@
       if (pane === panes[cur]) stage.style.height = h + "px";
     }
 
-    /* fonts, A+/A−, theme, resize — measured with all transitions disabled */
-    function refit() {
-      if (Date.now() - lastTouch < 640) { setTimeout(refit, 660); return; }
+    /* fonts, A+/A−, theme, resize — measured with all transitions disabled.
+       A closed view has no layout (display:none), so measuring it would
+       write zeros over every height; the first open measures instead. */
+    function refit(force) {
+      if (!isOpen && !force) return;
+      if (!force && Date.now() - lastTouch < 640) { setTimeout(function () { refit(force); }, 660); return; }
       sec.classList.add(NOFX);
       var h = 0;
       panes.forEach(function (pane) {
@@ -951,17 +1144,12 @@
       panes.forEach(moveTabInk);
       void stage.offsetHeight;
       requestAnimationFrame(function () { sec.classList.remove(NOFX); });
-      /* the dossier sits after the pinned ZPD scene, so its height only
-         matters for total scroll length — refresh so the pin stays exact */
-      if (window.ScrollTrigger) {
-        try { ScrollTrigger.refresh(); } catch (e) {}
-      }
     }
 
     var refitTimer = 0;
     function scheduleRefit() {
       clearTimeout(refitTimer);
-      refitTimer = setTimeout(refit, 120);
+      refitTimer = setTimeout(function () { refit(); }, 120);
     }
 
     /* click + keyboard for both tablists (RTL: left arrow moves forward) */
@@ -1015,13 +1203,12 @@
       showPane((cur + (dx > 0 ? 1 : -1) + panes.length) % panes.length);
     }, { passive: true });
 
-    refit();
     requestAnimationFrame(function () { sec.classList.add("ppl-live"); });
 
     window.addEventListener("resize", scheduleRefit);
     window.addEventListener("load", scheduleRefit);
     if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(function () { setTimeout(refit, 80); });
+      document.fonts.ready.then(function () { setTimeout(function () { refit(); }, 80); });
     }
     if (window.MutationObserver) {
       new MutationObserver(scheduleRefit)
@@ -1032,6 +1219,10 @@
     window.__people = {
       go: function (i) { showPane(i); },
       tab: function (i) { selectTab(panes[cur], i); },
+      open: function () { open(); },
+      close: function () { close(false); },
+      isOpen: function () { return isOpen; },
+      docScroll: function () { return savedY; },
       state: function () {
         var pane = panes[cur], body = bodyOf(pane), panel = activePanel(pane);
         return {
