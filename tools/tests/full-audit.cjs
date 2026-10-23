@@ -377,14 +377,14 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       return {
         exactOrder: JSON.stringify(sceneIds) === JSON.stringify(expectedIds),
         allJustified,
-        pdfOk: pdfRes.status === 200 && pdfBuf.byteLength === 921255,
+        pdfOk: pdfRes.status === 200 && pdfBuf.byteLength === 921199,
         zpdReady: window.__rail.zpd().pinned === true,
         cacheSynced: cacheTags.every(t => t && t.includes('?v=20261023e'))
       };
     });
     ok(deckAudit.exactOrder, 'all 29 scenes (#s2..#s30) present in exact PDF order');
     ok(deckAudit.allJustified, 'every slide translation & original paragraph remains text-align: justify');
-    ok(deckAudit.pdfOk, 'assets/Mathematics-For-All.pdf serves 200 OK with exact 921,255 bytes');
+    ok(deckAudit.pdfOk, 'assets/Mathematics-For-All.pdf serves 200 OK with exact 921,199 bytes');
     ok(deckAudit.zpdReady, 'Slide 23 (#s23) ZPD ScrollTrigger pin active and healthy');
     ok(deckAudit.cacheSynced, 'style.css, app.js, and summary.js share unified cache-buster ?v=20261023e');
 
