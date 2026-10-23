@@ -42,7 +42,7 @@
     </script>
     <link rel="preload" href="assets/BNazanin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="assets/BNazaninBold.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="assets/style.css" />
+    <link rel="stylesheet" href="assets/style.css?v=20261023b" />
   </head>
   <body>
     <div id="progress" aria-hidden="true"></div>
@@ -198,10 +198,10 @@
       </section>
     </main>
 
-    <div class="ppl-view" id="people" role="dialog" aria-modal="true" aria-labelledby="pplTitle" aria-hidden="true" inert>
+    <dialog class="ppl-view" id="people" aria-labelledby="pplTitle">
       <div class="ppl-sheet" data-ppl-scroll tabindex="-1">
-        <div class="wrap">
-          <div class="ppl-bar">
+        <div class="ppl-bar">
+          <div class="ppl-bar-inner">
             <button class="ppl-back" type="button" data-ppl-close>
               <span class="ppl-back-ic" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 5 7 7-7 7"/></svg>
@@ -210,6 +210,8 @@
             </button>
             <span class="ppl-barlabel">Mathematics For All · پیوست</span>
           </div>
+        </div>
+        <div class="wrap">
           <header class="ppl-head">
             <div class="ppl-kicker">پرونده‌ی شخصیت‌ها</div>
             <h2 class="ppl-h2" id="pplTitle">سه زندگی که این فصل را ساختند</h2>
@@ -406,7 +408,7 @@
           </div>
         </div>
       </div>
-    </div>
+    </dialog>
 
     <section id="closing">
         <div class="wrap">
@@ -430,7 +432,7 @@
     <script src="assets/vendor/gsap/gsap.min.js" defer></script>
     <script src="assets/vendor/gsap/ScrollTrigger.min.js" defer></script>
     <script src="assets/vendor/motion.js" defer></script>
-    <script src="assets/app.js" defer></script>
-    <script src="assets/summary.js" defer></script>
+    <script src="assets/app.js?v=20261023b" defer></script>
+    <script src="assets/summary.js?v=20261023b" defer></script>
   </body>
 </html>

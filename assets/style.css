@@ -704,38 +704,90 @@ body.tab-hidden .blob { animation-play-state: paused; }
    document — nothing three tabs tall can move the page any more. */
 #people {
   position: fixed; inset: 0; z-index: 90;
+  width: 100%; height: 100%; max-width: none; max-height: none;
+  margin: 0; padding: 0; border: 0;
   display: none;
-  background: var(--bg);
-  background-image: radial-gradient(120% 78% at 50% 0%, var(--card), transparent 72%);
+  overflow: hidden;
+  background: var(--bg); color: var(--ink);
   overscroll-behavior: contain;
   clip-path: circle(0px at var(--ppl-ox, 50%) var(--ppl-oy, 42%));
-  transition: clip-path .82s cubic-bezier(.62, .01, .2, 1);
+  transition: clip-path .62s cubic-bezier(.55, .02, .24, 1);
+}
+#people::backdrop {
+  position: fixed;
+  inset: -30vh -30vw;
+  background: var(--bg);
+  opacity: 0;
 }
 #people.is-mounted { display: block; }
-#people.is-open { clip-path: circle(var(--ppl-r, 160vmax) at var(--ppl-ox, 50%) var(--ppl-oy, 42%)); }
+#people.is-open {
+  clip-path: circle(var(--ppl-r, 160vmax) at var(--ppl-ox, 50%) var(--ppl-oy, 42%));
+  transition: clip-path .68s cubic-bezier(.22, 1, .36, 1);
+}
 #people.is-settled { clip-path: none !important; transition: none !important; }
+#people.is-settled::backdrop { opacity: 1; }
+
+/* Zero-reflow compositor shield: once a modal finishes opening (or the moment
+   the reader scrolls), hide all underlying main-page layers with visibility:hidden
+   so mobile URL-bar animation or rubber-band overscroll can NEVER show the deck. */
+html.ppl-lock .ambient,
+html.ppl-lock .lattice,
+html.summary-lock .ambient,
+html.summary-lock .lattice {
+  animation-play-state: paused !important;
+}
+#people:not(.is-settled) .ppl-bar,
+.summary-dialog:not(.is-settled) .summary-bar {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html.modal-settled main,
+html.modal-settled .topbar,
+html.modal-settled #rail,
+html.modal-settled #closing,
+html.modal-settled #toTop,
+html.modal-settled .ambient,
+html.modal-settled .lattice,
+html.modal-settled #progress {
+  visibility: hidden !important;
+}
+.summary-dialog,
+#people {
+  visibility: visible;
+}
 
 .ppl-sheet {
-  position: absolute; inset: 0;
+  position: relative;
+  height: 100%;
   overflow-y: auto; overflow-x: hidden;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-gutter: stable;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(120% 78% at 50% 0%, var(--card), transparent 72%),
+    radial-gradient(circle at 1px 1px, rgba(102, 124, 103, 0.09) 1px, transparent 0);
+  background-size: 100% 100%, 28px 28px;
+  transition: background-color .5s ease, color .5s ease;
 }
 .ppl-sheet .wrap { padding-bottom: calc(34px + env(safe-area-inset-bottom, 0px)); }
-/* air under the bar, not above it: the bar has to own the very top edge,
-   or the content scrolls through a 16px slit over it */
-.ppl-sheet .ppl-head { padding-top: clamp(12px, 2.6vh, 26px); padding-top: clamp(12px, 2.6svh, 26px); }
+/* air under the bar, not above it: use width-based clamp (never vh) so mobile
+   URL-bar show/hide causes 0.00px layout reflow during fast scrolling */
+.ppl-sheet .ppl-head { padding-top: clamp(14px, 2.2vw, 26px); }
 .ppl-sheet:focus, .ppl-sheet:focus-visible { outline: none; }
 
-/* the view's own bar: back out, and the name of the thing you are in */
+/* full-bleed sticky glass bar across every viewport width (matching .summary-bar) */
 .ppl-bar {
-  position: sticky; top: 0; z-index: 5;
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: calc(10px + env(safe-area-inset-top, 0px)) 0 11px;
+  position: sticky; top: 0; z-index: 6;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) clamp(16px, 4vw, 40px) 11px;
   background: var(--bar-bg);
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--line);
+  transition: background-color .5s ease, border-color .5s ease;
+}
+.ppl-bar-inner {
+  max-width: 1120px; margin-inline: auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
 .ppl-barlabel {
   font-size: calc(12.5px * var(--fs)); color: var(--ink-soft); letter-spacing: .02em;
@@ -769,17 +821,17 @@ body.tab-hidden .blob { animation-play-state: paused; }
   transition: opacity .46s ease, transform .58s cubic-bezier(.22, 1, .36, 1);
 }
 #people.is-open .ppl-sheet .wrap > * { opacity: 1; transform: none; }
-#people.is-entering .ppl-sheet .wrap > .ppl-bar { transition-delay: .10s; }
-#people.is-entering .ppl-sheet .wrap > .ppl-head { transition-delay: .20s; }
-#people.is-entering .ppl-sheet .wrap > .ppl-switch { transition-delay: .28s; }
-#people.is-entering .ppl-sheet .wrap > .ppl-stage { transition-delay: .34s; }
-#people.is-entering .ppl-sheet .wrap > .ppl-foot { transition-delay: .40s; }
+#people.is-entering .ppl-bar { animation: sumFadeDown .44s .06s both cubic-bezier(.22, 1, .36, 1); }
+#people.is-entering .ppl-sheet .wrap > .ppl-head { transition-delay: .16s; }
+#people.is-entering .ppl-sheet .wrap > .ppl-switch { transition-delay: .23s; }
+#people.is-entering .ppl-sheet .wrap > .ppl-stage { transition-delay: .30s; }
+#people.is-entering .ppl-sheet .wrap > .ppl-foot { transition-delay: .36s; }
 #people.is-entering .ppl-person[aria-selected="true"] .ppl-mono {
   animation: pplPop .6s cubic-bezier(.22, 1, .36, 1) .34s both;
 }
 
 /* the deck behind the view must not scroll while the view is up */
-html.ppl-lock, html.ppl-lock body { overflow: hidden; }
+html.ppl-lock { overflow: hidden; }
 .ppl-head { max-width: 780px; margin-inline: auto; text-align: center; }
 .ppl-kicker {
   display: inline-flex; align-items: center; gap: 10px;
@@ -858,14 +910,14 @@ html.ppl-lock, html.ppl-lock body { overflow: hidden; }
 #people.ppl-nofx .ppl-panel,
 #people.ppl-nofx .ppl-text > * { transition: none !important; }
 
-#people.ppl-live .ppl-stage { transition: height .52s cubic-bezier(.22, 1, .36, 1), background-color .5s ease, border-color .5s ease; }
+#people.ppl-live .ppl-stage { transition: height .48s cubic-bezier(.22, 1, .36, 1), background-color .5s ease, border-color .5s ease; }
 .ppl-pane {
   position: absolute; top: 0; left: 0; right: 0;
   padding: clamp(18px, 2.4vw, 30px);
-  opacity: 0; visibility: hidden; transform: translateY(12px);
+  opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(12px);
   transition: opacity .38s ease, transform .5s cubic-bezier(.22, 1, .36, 1), visibility .38s;
 }
-.ppl-pane.is-on { opacity: 1; visibility: visible; transform: none; }
+.ppl-pane.is-on { position: relative; opacity: 1; visibility: visible; pointer-events: auto; transform: none; }
 
 .ppl-id { display: flex; align-items: flex-start; gap: 14px; }
 .ppl-idtx { min-width: 0; }
@@ -907,10 +959,10 @@ html.ppl-lock, html.ppl-lock body { overflow: hidden; }
   position: absolute; top: 0; left: 0; right: 0;
   display: grid; grid-template-columns: minmax(0, 1.62fr) minmax(0, 1fr);
   gap: clamp(18px, 2.6vw, 32px); align-items: start;
-  opacity: 0; visibility: hidden;
+  opacity: 0; visibility: hidden; pointer-events: none;
   transition: opacity .34s ease, visibility .34s;
 }
-.ppl-panel.is-on { opacity: 1; visibility: visible; }
+.ppl-panel.is-on { position: relative; opacity: 1; visibility: visible; pointer-events: auto; }
 .ppl-text > * {
   opacity: 0; transform: translateY(14px);
   transition: opacity .4s ease, transform .5s cubic-bezier(.22, 1, .36, 1);
@@ -963,7 +1015,7 @@ html.ppl-lock, html.ppl-lock body { overflow: hidden; }
 .ppl-facts h4::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--line); }
 .ppl-facts ul {
   position: relative; list-style: none; margin: 0; padding: 0;
-  flex: 1 1 auto; display: grid; gap: clamp(14px, 2.4vh, 26px);
+  flex: 1 1 auto; display: grid; gap: clamp(14px, 1.8vw, 22px);
   align-content: start;
 }
 .ppl-facts li {
@@ -1069,7 +1121,7 @@ html.ppl-lock, html.ppl-lock body { overflow: hidden; }
 }
 @media (max-width: 560px) {
   .ppl-barlabel { display: none; }
-  .ppl-bar { justify-content: flex-start; }
+  .ppl-bar-inner { justify-content: flex-start; }
   .ppl-back { font-size: calc(14px * var(--fs)); padding: 7px 13px 7px 11px; }
 }
 @media (max-height: 560px) and (min-width: 761px) {
@@ -1089,21 +1141,26 @@ html.ppl-lock, html.ppl-lock body { overflow: hidden; }
    a plain section after the deck, every pane and panel expanded */
 :root:not(.js) #portal { display: none; }
 :root:not(.js) #people {
-  position: static; display: block; clip-path: none; background-image: none;
+  position: static; display: block !important;
+  width: auto; height: auto; max-width: none; max-height: none;
+  overflow: visible; clip-path: none; background-image: none;
   padding: clamp(46px, 8vh, 84px) 0 clamp(40px, 6vh, 68px);
   padding: clamp(46px, 8svh, 84px) 0 clamp(40px, 6svh, 68px);
   border-top: 1px solid var(--line);
 }
-:root:not(.js) .ppl-sheet { position: static; overflow: visible; }
+:root:not(.js) .ppl-sheet { position: static; height: auto; overflow: visible; background-image: none; }
 :root:not(.js) .ppl-sheet .wrap > * { opacity: 1; transform: none; }
 :root:not(.js) .ppl-bar, :root:not(.js) .ppl-foot { display: none; }
 
 @media print {
   #people {
-    position: static; display: block; clip-path: none; background: none;
+    position: static !important; display: block !important;
+    width: auto !important; height: auto !important;
+    max-width: none !important; max-height: none !important;
+    overflow: visible !important; clip-path: none !important; background: none !important;
     border-top: 1px solid var(--line);
   }
-  .ppl-sheet { position: static; overflow: visible; }
+  .ppl-sheet { position: static !important; height: auto !important; overflow: visible !important; background: none !important; }
   .ppl-sheet .wrap > * { opacity: 1 !important; transform: none !important; }
   .ppl-bar, .ppl-foot, #portal { display: none !important; }
   .portal-glow, .portal-ring-a, .portal-ring-b, .portal-mon { display: none; }
@@ -1526,14 +1583,17 @@ html.summary-lock { overflow: hidden; }
   overscroll-behavior: contain;
   background: var(--bg); color: var(--ink);
   clip-path: circle(0px at var(--summary-ox, 50%) var(--summary-oy, 42%));
-  transition: clip-path .74s cubic-bezier(.62, .01, .2, 1);
+  transition: clip-path .62s cubic-bezier(.55, .02, .24, 1);
 }
 .summary-dialog::backdrop {
+  position: fixed;
+  inset: -30vh -30vw;
   background: var(--bg);
   opacity: 0;
 }
 .summary-dialog.is-open {
   clip-path: circle(var(--summary-radius, 160vmax) at var(--summary-ox, 50%) var(--summary-oy, 42%));
+  transition: clip-path .68s cubic-bezier(.22, 1, .36, 1);
 }
 /* Critical stability guarantee: once the opening circle covers the viewport,
    drop clip-path and turn ::backdrop opaque paper so touch/wheel scrolling

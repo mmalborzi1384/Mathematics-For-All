@@ -72,7 +72,7 @@
   bar.appendChild(barInner);
   bar.appendChild(progress);
 
-  content.parentNode.insertBefore(dialog, content);
+  (document.body || content.parentNode).insertBefore(dialog, document.getElementById("people") || null);
   sheet.appendChild(bar);
   sheet.appendChild(content);
   dialog.appendChild(sheet);
@@ -330,9 +330,29 @@
     }
   }
 
+  function settleSummary() {
+    clearTimeout(settleTimer);
+    clearTimeout(enterTimer);
+    dialog.classList.remove("is-entering");
+    if (dialog.open && !closing) {
+      dialog.classList.add("is-settled");
+      root.classList.add("modal-settled");
+      updateReading(true);
+    }
+  }
+
+  function onEarlySummaryScroll() {
+    if (dialog.open && !closing && !dialog.classList.contains("is-settled")) {
+      settleSummary();
+    }
+  }
+
   function scheduleReading() {
+    onEarlySummaryScroll();
     if (!frame) frame = requestAnimationFrame(function () { updateReading(false); });
   }
+  sheet.addEventListener("touchmove", onEarlySummaryScroll, { passive: true });
+  sheet.addEventListener("wheel", onEarlySummaryScroll, { passive: true });
   sheet.addEventListener("scroll", scheduleReading, { passive: true });
 
   /* ---- 4. Open / Close / History / Print lifecycle ----------------------- */
@@ -398,24 +418,15 @@
     lastActive = -2;
     dialog.classList.add("is-entering");
 
-    /* Commit closed circle(0px) synchronously before opening frame */
+    /* Commit closed circle(0px) synchronously, then start expansion immediately */
     void dialog.offsetWidth;
-    requestAnimationFrame(function () {
-      if (!dialog.open || closing) return;
-      dialog.classList.add("is-open");
-      updateReading(true);
-    });
+    dialog.classList.add("is-open");
+    updateReading(true);
 
     /* Once the circular reveal and entrance stagger complete, drop clip-path
        and entrance classes together (.is-settled) so scrolling runs on pure
        unmasked layers with every card at opacity: 1 and transform: none. */
-    settleTimer = setTimeout(function () {
-      dialog.classList.remove("is-entering");
-      if (dialog.open && !closing) {
-        dialog.classList.add("is-settled");
-        updateReading(true);
-      }
-    }, reduce.matches ? 0 : 900);
+    settleTimer = setTimeout(settleSummary, reduce.matches ? 0 : 880);
 
     var titleEl = document.getElementById("summaryTitle");
     if (titleEl) titleEl.focus({ preventScroll: true });
@@ -436,7 +447,7 @@
     clearTimeout(enterTimer);
     dialog.classList.remove("is-open", "is-settled", "is-entering");
     if (dialog.open) dialog.close();
-    root.classList.remove("summary-lock");
+    root.classList.remove("summary-lock", "modal-settled");
     window.scrollTo({ top: savedY, behavior: "instant" });
     if (window.__rail && window.__rail.layout) window.__rail.layout();
     trigger.focus({ preventScroll: true });
@@ -448,6 +459,7 @@
     closing = true;
     clearTimeout(settleTimer);
     clearTimeout(enterTimer);
+    root.classList.remove("modal-settled");
 
     /* Re-arm full-screen circle from live viewport before shrinking back to 0px */
     computeWipeGeometry(true);
