@@ -15,7 +15,15 @@
         below) and the #s23 ZPD pin staying exact through mid-page refreshes,
         mid-page reloads with a late font swap, and injected layout shifts
         (the Linux "slide 23 appears on later slides" regression); deep
-        links (/#s26) stay seated through a late webfont swap on phones. */
+        links (/#s26) stay seated through a late webfont swap on phones.
+     6) Share section (#share card + #shareView lightbox): the canonical
+        address and the QR code in both places, the hero / top-bar / tile
+        openers, Esc / backdrop / close-button exits with the exit
+        transition, scroll lock and focus return, Tab containment, arrow-key
+        guard, async-clipboard copy and its execCommand fallback, the native
+        share sheet (present / absent / dismissed / refused), reduced
+        motion, phones (tap, 390 and 320 fit, hidden top-bar pill, /#share
+        deep link), print and no-JS fallbacks. */
 const assert = require('node:assert/strict');
 const { execSync } = require('node:child_process');
 const puppeteer = require('puppeteer-core');
@@ -340,6 +348,9 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       await page.$eval('[data-sum-scroll]', s => { s.scrollTop = s.scrollHeight; });
       await delay(90);
       await page.waitForFunction(() => window.__summary.state().activeAnims === 0, { timeout: 2500 });
+      /* the step ink glides on a CSS transition that is not a WAAPI anim:
+         let it land before measuring its alignment */
+      await page.waitForFunction(() => { const ink = document.querySelector('.sum-step-ink'); return !ink || ink.getAnimations().length === 0; }, { timeout: 2500 }).catch(() => {});
       const fullSweep = await page.evaluate(() => ({
         state: window.__summary.state(),
         stepInkAligned: (() => {
@@ -384,14 +395,14 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         allJustified,
         pdfOk: pdfRes.status === 200 && pdfBuf.byteLength === 921399,
         zpdReady: window.__rail.zpd().pinned === true,
-        cacheSynced: cacheTags.every(t => t && t.includes('?v=20261024b'))
+        cacheSynced: cacheTags.every(t => t && t.includes('?v=20261024c'))
       };
     });
     ok(deckAudit.exactOrder, 'all 29 scenes (#s2..#s30) present in exact PDF order');
     ok(deckAudit.allJustified, 'every slide translation & original paragraph remains text-align: justify');
     ok(deckAudit.pdfOk, 'assets/Mathematics-For-All.pdf serves 200 OK with exact 921,399 bytes');
     ok(deckAudit.zpdReady, 'Slide 23 (#s23) ZPD ScrollTrigger pin active and healthy');
-    ok(deckAudit.cacheSynced, 'style.css, app.js, and summary.js share unified cache-buster ?v=20261024b');
+    ok(deckAudit.cacheSynced, 'style.css, app.js, and summary.js share unified cache-buster ?v=20261024c');
 
     /* Verify #hero velvet opening choreography, Bidi Latin run order, & zero resting GPU layers */
     await deckPage.waitForFunction(() => window.__heroMotion && !window.__heroMotion.stats().animating, { timeout: 4000 });
@@ -610,18 +621,28 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         const from = Math.max(0, spacer.getBoundingClientRect().top + scrollY - 2400);
         const to = spacer.getBoundingClientRect().top + scrollY + 4200;
         let bad = 0, samples = 0;
+        const detail = [];
         const step = async y => {
           window.scrollTo({ top: y, behavior: 'instant' });
           await sleep(20);
+          /* sample after the next frame: ScrollTrigger seats the stage in
+             its ticker, and a starved harness frame can run late */
+          await new Promise(r => requestAnimationFrame(r));
           const r = stage.getBoundingClientRect();
           samples++;
-          if (r.bottom > 0 && r.top < innerHeight && !near.has(centre())) bad++;
+          if (r.bottom > 0 && r.top < innerHeight && !near.has(centre())) {
+            bad++;
+            if (detail.length < 4) {
+              const st = ScrollTrigger.getById('zpdPin');
+              detail.push(`y=${Math.round(y)} centre=${centre()} stageTop=${Math.round(r.top)} ${getComputedStyle(stage).position} pin=${Math.round(st.start)}–${Math.round(st.end)} spacerTop=${Math.round(spacer.getBoundingClientRect().top + scrollY)}`);
+            }
+          }
         };
         for (let y = to; y >= from; y -= 120) await step(y);
         for (let y = from; y <= to; y += 120) await step(y);
-        return { bad, samples };
+        return { bad, samples, detail };
       });
-      ok(ghosts.bad === 0, `no ghost slide 23 anywhere between slides 21 and 27 (${ghosts.samples} samples)`);
+      ok(ghosts.bad === 0, `no ghost slide 23 anywhere between slides 21 and 27 (${ghosts.samples} samples)${ghosts.bad ? ' — ' + ghosts.detail.join(' | ') : ''}`);
 
       /* injected layout shift above the stage (1,600px) must self-heal */
       const healed = await page.evaluate(async () => {
@@ -731,6 +752,298 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         await page.close();
       }
       ok(errors.length === 0, `zero JS errors in the deep-link seating QA: ${errors.join('; ')}`);
+    }
+
+    /* ======================================================================
+       PART 6: Share section — closing card + lightbox, link + QR
+       ====================================================================== */
+    {
+      const CANON = 'https://mmalborzi1384.github.io/Mathematics-For-All/';
+      const ctx = browser.defaultBrowserContext();
+      await ctx.overridePermissions(base, ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write']);
+      const errors = [];
+      const fresh = async (w, h, mobile, opts = {}) => {
+        const page = await browser.newPage();
+        page.on('pageerror', e => errors.push(e.message));
+        page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+        await page.setViewport({ width: w, height: h, deviceScaleFactor: 1, isMobile: !!mobile, hasTouch: !!mobile });
+        if (opts.init) await page.evaluateOnNewDocument(opts.init);
+        if (opts.media) await page.emulateMediaFeatures(opts.media);
+        await page.goto(base + (opts.hash || ''), { waitUntil: 'networkidle0' });
+        await page.evaluate(() => document.fonts.ready);
+        await delay(400);
+        return page;
+      };
+      const state = page => page.evaluate(() => {
+        const d = document.getElementById('shareView');
+        const a = document.activeElement;
+        return {
+          open: d.open, isIn: d.classList.contains('is-in'),
+          lock: document.documentElement.classList.contains('share-lock'),
+          active: a ? (a.id || a.className || a.tagName) : '',
+          y: Math.round(scrollY),
+          nativeHidden: [...document.querySelectorAll('[data-share-native]')].map(b => b.hidden)
+        };
+      });
+      const toCard = async page => {
+        await page.evaluate(() => document.getElementById('share').scrollIntoView({ block: 'center', behavior: 'instant' }));
+        await delay(1400);
+      };
+      /* the entrance / exit classes land on real frames: wait for the state
+         rather than a fixed time, then assert it (the slow software
+         compositor behind this harness can stretch a frame past 200ms) */
+      const settled = async (page, want) => {
+        try {
+          await page.waitForFunction((want) => {
+            const d = document.getElementById('shareView');
+            const lock = document.documentElement.classList.contains('share-lock');
+            if (want !== 'in') return !d.open && !lock && !d.classList.contains('is-in');
+            /* "in" also means the card has finished its entrance transform, so
+               a click / tap aimed at a control lands where the control is */
+            const card = d.querySelector('.share-view-card');
+            return d.open && d.classList.contains('is-in') && lock && getComputedStyle(card).transform === 'none';
+          }, { timeout: 2500, polling: 40 }, want);
+        } catch (e) { /* the assertion that follows reports the real state */ }
+      };
+
+      /* 6A — structure: one address everywhere, the QR in the card and the
+         lightbox, the download link, the labelled dialog */
+      {
+        const page = await fresh(1366, 768, false);
+        const st = await page.evaluate(() => {
+          const txt = el => el.textContent.replace(/\s+/g, '');
+          const d = document.getElementById('shareView');
+          const card = document.getElementById('share');
+          const dl = card.querySelector('a[download]');
+          return {
+            url: window.__share && window.__share.url,
+            urls: [...document.querySelectorAll('.share-url')].map(txt),
+            imgs: [...document.querySelectorAll('.share-qr img, .share-view-qr')].map(i => ({ ok: i.complete && i.naturalWidth === 500 && i.naturalHeight === 500, alt: i.alt, src: i.getAttribute('src') })),
+            openers: [...document.querySelectorAll('[data-share-open]')].map(b => b.id || b.className),
+            dialogLabel: d.getAttribute('aria-labelledby') && !!document.getElementById(d.getAttribute('aria-labelledby')),
+            cardLabel: card.getAttribute('aria-labelledby') === 'shareTitle' && !!document.getElementById('shareTitle'),
+            status: [...document.querySelectorAll('.share-status')].every(p => p.getAttribute('role') === 'status'),
+            dl: dl && { href: dl.getAttribute('href'), name: dl.getAttribute('download') },
+            tile: card.querySelector('.share-qr').getAttribute('aria-controls') === 'shareView',
+            order: (() => { const kids = [...card.parentElement.children].map(k => k.className.split(' ')[0]); return kids.join('>'); })()
+          };
+        });
+        ok(st.url === CANON, `share url comes from the canonical link (${st.url})`);
+        ok(st.urls.length === 2 && st.urls.every(u => u === 'mmalborzi1384.github.io/Mathematics-For-All'), 'the address is printed identically in the card and the lightbox');
+        ok(st.imgs.length === 2 && st.imgs.every(i => i.ok && i.alt && i.src === 'assets/qr-mathematics-for-all.png'), 'both QR images decode at 500×500 from the committed PNG with alt text');
+        ok(st.openers.length === 3 && st.openers.includes('tbShare'), `three openers: top bar, hero pill, card tile (${st.openers.join(', ')})`);
+        ok(st.dialogLabel && st.cardLabel && st.status && st.tile, 'dialog and card are labelled, status lines are live regions, the tile controls the dialog');
+        ok(st.dl && st.dl.href === 'assets/qr-mathematics-for-all.png' && st.dl.name === 'Mathematics-For-All-QR.png', 'the QR download link points at the PNG with a friendly file name');
+        ok(/thanks-card>presenters>btn-pdf>share-card>colophon$/.test(st.order), `the share card sits between the PDF pill and the colophon (${st.order})`);
+        const head = await page.evaluate(async (h) => { const r = await fetch(h, { method: 'HEAD' }); return { status: r.status, type: r.headers.get('content-type') || '' }; }, 'assets/qr-mathematics-for-all.png');
+        ok(head.status === 200 && /image\/png/.test(head.type), 'the QR PNG is served (200 image/png)');
+        await page.close();
+      }
+
+      /* 6B — desktop interaction: openers, exits, lock, focus, Tab, arrows */
+      {
+        const page = await fresh(1366, 768, false);
+        let s = await state(page);
+        ok(!s.open && !s.lock && !s.isIn, 'lightbox starts closed and unlocked');
+        await page.click('#hero .btn-share'); await settled(page, 'in');
+        s = await state(page);
+        ok(s.open && s.isIn && s.lock && s.y === 0, 'hero pill opens the lightbox (open + is-in + share-lock) without a scroll jump');
+        ok(s.active === 'share-view-card', `focus moves into the card (${s.active})`);
+        await page.keyboard.press('Escape'); await delay(80);
+        s = await state(page);
+        ok(s.open && !s.isIn, 'Esc plays the exit transition first (still open, is-in dropped)');
+        await settled(page, 'out');
+        s = await state(page);
+        ok(!s.open && !s.lock && !s.isIn, 'closed, unlocked and clean after the exit');
+        ok(/btn-share/.test(s.active), `focus returns to the hero opener (${s.active})`);
+        await page.click('#hero .btn-share'); await settled(page, 'in');
+        await page.keyboard.press('Escape'); await delay(30); await page.keyboard.press('Escape'); await delay(40);
+        s = await state(page);
+        ok(!s.open && !s.lock && !s.isIn, 'a second Esc during the exit closes at once and cleans up synchronously');
+        await page.click('#tbShare'); await settled(page, 'in');
+        s = await state(page);
+        ok(s.open && s.isIn, 'top-bar pill opens the lightbox');
+        await page.mouse.click(30, 400); await settled(page, 'out');
+        s = await state(page);
+        ok(!s.open && !s.lock && s.active === 'tbShare', `backdrop click closes and focus returns to the top-bar pill (${s.active})`);
+        await page.click('#tbShare'); await settled(page, 'in');
+        await page.click('#shareView [data-share-close]'); await settled(page, 'out');
+        ok(!(await state(page)).open, 'the close button closes');
+        await page.evaluate(() => scrollTo(0, 0));
+        await page.click('#hero .btn-share'); await settled(page, 'in');
+        await page.keyboard.press('ArrowDown'); await page.keyboard.press('PageDown'); await page.keyboard.press('ArrowRight'); await delay(700);
+        s = await state(page);
+        ok(s.open && s.y === 0, 'arrow / page keys do not drive the deck while the lightbox is open');
+        const trail = [];
+        for (let i = 0; i < 8; i++) {
+          await page.keyboard.press('Tab');
+          trail.push(await page.evaluate(() => { const a = document.activeElement; return a.closest('#shareView') ? (a.className.split(' ')[0] + (a.hasAttribute('data-share-copy') ? '.copy' : a.hasAttribute('download') ? '.dl' : '')) : 'OUT'; }));
+        }
+        const nCtl = await page.evaluate(() => [...document.querySelectorAll('#shareView a[href], #shareView button')].filter(el => !el.hidden).length);
+        ok(trail.every(t => t !== 'OUT') && trail[0] === 'share-view-close' && trail[nCtl] === 'share-view-close', `Tab cycles through the card's ${nCtl} controls and never leaves it (${trail.join(' → ')})`);
+        await page.evaluate(() => document.querySelector('#shareView .share-view-close').focus());
+        await page.keyboard.down('Shift'); await page.keyboard.press('Tab'); await page.keyboard.up('Shift');
+        const back = await page.evaluate(() => document.activeElement.hasAttribute('download'));
+        ok(back, 'Shift+Tab from the close button wraps to the last control');
+        const hiddenShown = await page.evaluate(() => [...document.querySelectorAll('#shareView [hidden], #share [hidden]')].filter(el => getComputedStyle(el).display !== 'none').length);
+        ok(hiddenShown === 0, '[hidden] share controls are really display:none (not overridden by .share-btn)');
+        await page.keyboard.press('Escape'); await settled(page, 'out');
+
+        /* copy from the card, then from the lightbox */
+        await toCard(page);
+        await page.click('#share [data-share-copy]'); await delay(250);
+        const c1 = await page.evaluate(async () => ({
+          clip: await navigator.clipboard.readText(),
+          label: document.querySelector('#share [data-share-copy] .share-btn-tx').textContent,
+          done: document.querySelector('#share [data-share-copy]').classList.contains('is-done'),
+          status: document.querySelector('#share .share-status').textContent
+        }));
+        ok(c1.clip === CANON, `copy puts the canonical address on the clipboard (${c1.clip})`);
+        ok(c1.label === 'کپی شد' && c1.done && c1.status === 'پیوند ارائه کپی شد.', 'the button flashes «کپی شد» and the live status announces the copy');
+        await delay(2500);
+        const c1b = await page.evaluate(() => ({ label: document.querySelector('#share [data-share-copy] .share-btn-tx').textContent, done: document.querySelector('#share [data-share-copy]').classList.contains('is-done') }));
+        ok(c1b.label === 'کپی پیوند' && !c1b.done, 'the copy button restores its label after the flash');
+        await delay(1200);
+        ok((await page.evaluate(() => document.querySelector('#share .share-status').textContent)) === '', 'the status line clears itself');
+        await page.click('#share .share-qr'); await settled(page, 'in');
+        s = await state(page);
+        const yBefore = s.y;
+        ok(s.open && s.isIn, 'the card\'s QR tile opens the lightbox');
+        await page.evaluate(() => navigator.clipboard.writeText('x'));
+        await page.click('#shareView [data-share-copy]'); await delay(250);
+        const c2 = await page.evaluate(async () => ({ clip: await navigator.clipboard.readText(), status: document.querySelector('#shareView .share-status').textContent }));
+        ok(c2.clip === CANON && c2.status === 'پیوند ارائه کپی شد.', 'copy works inside the lightbox too');
+        await page.keyboard.press('Escape'); await settled(page, 'out');
+        s = await state(page);
+        ok(!s.open && s.y === yBefore && /share-qr/.test(s.active), `closing returns to the same scroll position and the tile (${s.y} vs ${yBefore}, ${s.active})`);
+        ok((await page.evaluate(() => document.querySelector('#shareView .share-status').textContent)) === '', 'the lightbox status is reset on close');
+        await page.close();
+      }
+
+      /* 6C — clipboard fallback and the native share sheet */
+      {
+        let page = await fresh(1366, 768, false, { init: () => { Object.defineProperty(navigator, 'clipboard', { get: () => undefined }); } });
+        await toCard(page);
+        await page.click('#share [data-share-copy]'); await delay(200);
+        const fb = await page.evaluate(() => ({ label: document.querySelector('#share [data-share-copy] .share-btn-tx').textContent, status: document.querySelector('#share .share-status').textContent, leftovers: document.querySelectorAll('body > textarea').length }));
+        ok(fb.label === 'کپی شد' && fb.status === 'پیوند ارائه کپی شد.' && fb.leftovers === 0, 'without the async clipboard the execCommand fallback copies and leaves no textarea behind');
+        await page.close();
+
+        page = await fresh(1366, 768, false, { init: () => { Object.defineProperty(navigator, 'share', { get: () => undefined }); Object.defineProperty(navigator, 'canShare', { get: () => undefined }); } });
+        ok((await state(page)).nativeHidden.every(Boolean), 'the native-share pill is hidden where navigator.share is missing');
+        await page.close();
+
+        page = await fresh(1366, 768, false, { init: () => { window.__shared = []; Object.defineProperty(navigator, 'share', { get: () => d => { window.__shared.push(d); return Promise.resolve(); } }); Object.defineProperty(navigator, 'canShare', { get: () => () => true }); } });
+        ok((await state(page)).nativeHidden.every(h => !h), 'the native-share pill shows where navigator.share exists');
+        await toCard(page);
+        await page.click('#share [data-share-native]'); await delay(200);
+        const sh = await page.evaluate(() => ({ calls: window.__shared, status: document.querySelector('#share .share-status').textContent }));
+        ok(sh.calls.length === 1 && sh.calls[0].url === CANON && sh.calls[0].title && sh.calls[0].text && sh.status === 'سپاس! ارائه به اشتراک گذاشته شد.', 'the sheet receives title / text / canonical url and the status thanks the reader');
+        await page.close();
+
+        page = await fresh(1366, 768, false, { init: () => { let n = 0; Object.defineProperty(navigator, 'share', { get: () => () => { n++; return Promise.reject(new DOMException('x', n === 1 ? 'AbortError' : 'NotAllowedError')); } }); Object.defineProperty(navigator, 'canShare', { get: () => () => true }); } });
+        await toCard(page);
+        await page.click('#share [data-share-native]'); await delay(200);
+        ok((await page.evaluate(() => document.querySelector('#share .share-status').textContent)) === '', 'a dismissed sheet (AbortError) stays silent');
+        await page.click('#share [data-share-native]'); await delay(250);
+        const na = await page.evaluate(() => ({ status: document.querySelector('#share .share-status').textContent, label: document.querySelector('#share [data-share-native] .share-btn-tx').textContent }));
+        ok(na.status === 'پیوند ارائه کپی شد.' && na.label === 'کپی شد', 'a refused sheet falls back to copying the address');
+        await page.close();
+      }
+
+      /* 6D — reduced motion: instant in and out, lock still released */
+      {
+        const page = await fresh(1366, 768, false, { media: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+        await page.click('#hero .btn-share'); await delay(60);
+        let s = await state(page);
+        ok(s.open && s.isIn && s.lock, 'reduced motion: opens instantly');
+        await page.keyboard.press('Escape'); await delay(60);
+        s = await state(page);
+        ok(!s.open && !s.lock, 'reduced motion: closes instantly and unlocks');
+        await page.close();
+      }
+
+      /* 6E — phones: tap, fit, hidden top-bar pill, deep link, 320 */
+      {
+        let page = await fresh(390, 844, true);
+        ok((await page.evaluate(() => getComputedStyle(document.getElementById('tbShare')).display)) === 'none', 'the top-bar share pill steps aside on phones (≤720px)');
+        const heroRow = await page.evaluate(() => {
+          const a = document.querySelector('#hero .btn-pdf').getBoundingClientRect(), b = document.querySelector('#hero .btn-share').getBoundingClientRect();
+          return { sameRow: Math.abs(a.top - b.top) < 2, fit: a.left >= 0 && b.left >= 0 && a.right <= innerWidth && b.right <= innerWidth, h: Math.round(b.height) };
+        });
+        ok(heroRow.sameRow && heroRow.fit && heroRow.h >= 40, `hero PDF + share pills share one row at 390 (${heroRow.h}px tall)`);
+        await page.tap('#hero .btn-share'); await settled(page, 'in');
+        let s = await state(page);
+        ok(s.open && s.isIn && s.lock, 'a tap opens the lightbox on a phone');
+        const fit = await page.evaluate(() => { const c = document.querySelector('#shareView .share-view-card').getBoundingClientRect(); const card = document.querySelector('#shareView .share-view-card'); return { inside: c.left >= 0 && c.right <= innerWidth && c.top >= 0 && c.bottom <= innerHeight, scrolls: card.scrollHeight > card.clientHeight + 1, qr: Math.round(document.querySelector('.share-view-qr').getBoundingClientRect().width) }; });
+        ok(fit.inside && !fit.scrolls && fit.qr >= 200, `the lightbox fits a 390×844 phone without inner scrolling (QR ${fit.qr}px)`);
+        await page.tap('#shareView [data-share-close]'); await settled(page, 'out');
+        ok(!(await state(page)).open, 'a tap on the close button closes');
+        await page.close();
+
+        for (const vp of [{ w: 1366, h: 660 }, { w: 1280, h: 620 }, { w: 844, h: 390, mobile: true }]) {
+          page = await fresh(vp.w, vp.h, !!vp.mobile);
+          await page.click('#hero .btn-share'); await settled(page, 'in');
+          const f = await page.evaluate(() => { const card = document.querySelector('#shareView .share-view-card'); const c = card.getBoundingClientRect(); return { inside: c.top >= 0 && c.bottom <= innerHeight, scrolls: card.scrollHeight > card.clientHeight + 1, qr: Math.round(document.querySelector('.share-view-qr').getBoundingClientRect().width) }; });
+          ok(f.inside && !f.scrolls && f.qr >= 160, `the lightbox fits ${vp.w}×${vp.h} without inner scrolling (QR ${f.qr}px)`);
+          await page.close();
+        }
+
+        /* the top bar: icon-only share pill on tablets, text from 901px, and
+           the brand never squeezed to an ellipsis where the pill shows */
+        page = await fresh(1366, 800, false);
+        const bar = [];
+        for (const w of [600, 667, 720, 721, 768, 834, 900, 901, 1024, 1366]) {
+          await page.setViewport({ width: w, height: 800, deviceScaleFactor: 1 });
+          await delay(150);
+          bar.push(await page.evaluate((w) => {
+            const t = document.querySelector('.topbar .tb-title'); const tr = t.getBoundingClientRect();
+            const pill = document.getElementById('tbShare');
+            const kids = [...document.querySelectorAll('.topbar .tb-actions > *')].filter(k => getComputedStyle(k).display !== 'none').map(k => k.getBoundingClientRect());
+            return { w, titleFull: tr.width > 0 && t.scrollWidth <= t.clientWidth + 0.5, pill: getComputedStyle(pill).display !== 'none', tx: getComputedStyle(pill.querySelector('.tb-share-tx')).display !== 'none', inside: kids.every(r => r.left >= 0 && r.right <= w), oneRow: (() => { const c = kids.map(r => r.top + r.height / 2); return Math.max(...c) - Math.min(...c) <= 2; })() };
+          }, w));
+        }
+        ok(bar.every(b => b.titleFull && b.inside && b.oneRow), `the brand stays whole and the controls stay on one row from 600px up (${bar.filter(b => !b.titleFull).map(b => b.w).join(',') || 'all'})`);
+        ok(bar.every(b => (b.w <= 720 ? !b.pill : b.pill) && (b.w > 900 ? b.tx : !b.tx)), 'the top-bar share pill: hidden ≤720, icon-only 721–900, with its label from 901px');
+        await page.close();
+
+        page = await fresh(390, 844, true, { hash: '#share' });
+        await delay(1200);
+        const dlp = await page.evaluate(() => { const r = document.getElementById('share').getBoundingClientRect(); return { top: Math.round(r.top), vis: r.top < innerHeight && r.bottom > 0 }; });
+        ok(dlp.vis && dlp.top >= 40, `/#share lands on the card below the top bar (top ${dlp.top}px)`);
+        await page.close();
+
+        page = await fresh(320, 640, true);
+        const over = await page.evaluate(() => {
+          document.getElementById('share').scrollIntoView({ block: 'center', behavior: 'instant' });
+          const out = [];
+          document.querySelectorAll('#share, #share *').forEach(el => { const r = el.getBoundingClientRect(); if (r.width && (r.left < -0.5 || r.right > innerWidth + 0.5)) out.push(el.className || el.tagName); });
+          const url = document.querySelector('#share .share-url').getBoundingClientRect();
+          return { out, docW: document.documentElement.scrollWidth, iw: innerWidth, urlLines: Math.round(url.height / parseFloat(getComputedStyle(document.querySelector('#share .share-url')).lineHeight)) };
+        });
+        ok(over.out.length === 0 && over.docW <= over.iw, `the share card never overflows a 320px phone (${over.out.join(', ') || 'clean'})`);
+        ok(over.urlLines <= 2, `the address wraps at the slash, at most two lines at 320 (${over.urlLines})`);
+        await page.close();
+      }
+
+      /* 6F — print keeps the scannable card; no-JS keeps link + QR + download */
+      {
+        let page = await fresh(1366, 768, false);
+        await page.emulateMediaType('print');
+        const pr = await page.evaluate(() => { const d = s => getComputedStyle(document.querySelector(s)).display; return { view: d('#shareView'), heroShare: d('#hero .btn-share'), actions: d('#share .share-actions'), hint: d('#share .share-qr-hint'), card: d('#share'), qr: d('#share .share-qr img'), url: d('#share .share-url') }; });
+        ok(pr.view === 'none' && pr.heroShare === 'none' && pr.actions === 'none' && pr.hint === 'none' && pr.card !== 'none' && pr.qr !== 'none' && pr.url !== 'none', 'print keeps the card with the QR and address and drops the interactive controls');
+        await page.close();
+
+        page = await browser.newPage();
+        await page.setJavaScriptEnabled(false);
+        await page.setViewport({ width: 1366, height: 768 });
+        await page.goto(base, { waitUntil: 'networkidle0' });
+        await delay(300);
+        const nj = await page.evaluate(() => { const d = s => { const e = document.querySelector(s); return e ? getComputedStyle(e).display : 'missing'; }; return { js: document.documentElement.classList.contains('js'), tb: d('#tbShare'), heroShare: d('#hero .btn-share'), copy: d('#share [data-share-copy]'), native: d('#share [data-share-native]'), dl: d('#share a[download]'), tile: d('#share .share-qr'), hint: d('#share .share-qr-hint'), url: d('#share .share-url'), card: d('#share'), opacity: getComputedStyle(document.getElementById('share')).opacity }; });
+        ok(!nj.js && nj.tb === 'none' && nj.heroShare === 'none' && nj.copy === 'none' && nj.native === 'none' && nj.hint === 'none' && nj.dl !== 'none' && nj.tile !== 'none' && nj.url !== 'none' && nj.card !== 'none' && nj.opacity === '1', 'without JavaScript the card, QR, address and download stay visible and script-only controls hide');
+        await page.close();
+      }
+      ok(errors.length === 0, `zero JS / console errors across the share QA: ${errors.join('; ')}`);
     }
 
     console.log(`PASS ${checks} full-site audit assertions`);
