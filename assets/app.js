@@ -869,7 +869,7 @@
     if (ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
     var a = ev.target && ev.target.closest ? ev.target.closest('a[href^="#"]') : null;
     if (!a || (rail && rail.contains(a))) return;
-    if (a.hasAttribute("data-summary-open") || a.hasAttribute("data-ppl-open")) return;
+    if (a.hasAttribute("data-summary-open") || a.hasAttribute("data-ppl-open") || a.hasAttribute("data-note-open")) return;
     var href = a.getAttribute("href") || "";
     if (href.length < 2) return;
     var id = href.slice(1);
@@ -1386,7 +1386,7 @@
     var a = e.target.closest ? e.target.closest('a[href^="#"]') : null;
     if (!a || a.classList.contains("skip")) return;
     /* the dossier trigger is a door, not an anchor: the people module owns it */
-    if (a.hasAttribute("data-ppl-open") || a.hasAttribute("data-summary-open")) return;
+    if (a.hasAttribute("data-ppl-open") || a.hasAttribute("data-summary-open") || a.hasAttribute("data-note-open")) return;
     var id = a.getAttribute("href").slice(1);
     if (!id || !document.getElementById(id)) return;
     e.preventDefault();
@@ -1394,7 +1394,7 @@
   });
 
   document.addEventListener("keydown", function (e) {
-    if (e.metaKey || e.ctrlKey || e.altKey || root.classList.contains("summary-lock") || root.classList.contains("ppl-lock") || root.classList.contains("share-lock")) return;
+    if (e.metaKey || e.ctrlKey || e.altKey || root.classList.contains("summary-lock") || root.classList.contains("ppl-lock") || root.classList.contains("share-lock") || root.classList.contains("note-lock")) return;
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     var t = e.target;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
@@ -2335,6 +2335,305 @@
           clipped: pane.offsetHeight > stage.offsetHeight + 1
         };
       }
+    };
+  })();
+
+  /* ---------------------------------------------------------------- margin note: «جبر نامی» (#nominative)
+     Slide 9 mentions nominative determinism in passing; the door under the
+     slide opens a compact aside — a third, smaller appendix next to
+     «سه زندگی» and «از ابتدای فصل تا اینجا». The <dialog> lives inside
+     #s9 so a reader without JavaScript gets it inline, under the slide.
+     Open: showModal(), scroll lock, an opacity + lift entrance committed
+     from the closed styles with a forced style read, title wipe + prose
+     stream, and one history entry (#nominative) so Back on a phone
+     closes it. Tabs: roving tabindex, arrow keys (RTL: left = forward),
+     a sliding ink, a height morph of the body, and the typing engine on
+     the incoming panel. Esc plays the exit first; focus returns to the
+     door. The translation above is never touched. */
+  (function () {
+    var view = document.getElementById("nominative");
+    if (!view) return;
+    var card = view.querySelector(".note-card");
+    var tabs = Array.prototype.slice.call(view.querySelectorAll(".note-tab"));
+    var panels = Array.prototype.slice.call(view.querySelectorAll(".note-panel"));
+    var ink = view.querySelector(".note-ink");
+    var body = view.querySelector("[data-note-body]");
+    var doors = Array.prototype.slice.call(document.querySelectorAll("[data-note-open]"));
+    var scene = view.closest(".scene");
+    var hasModal = typeof view.showModal === "function";
+    if (!card || !tabs.length || tabs.length !== panels.length || !body) return;
+
+    var HASH = "#nominative";
+    var EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+    var isOpen = false, cur = 0, opener = null, savedY = 0, restorePopY = null;
+    var pushed = false, closeT = 0, heightAnim = null, anims = [];
+    if (!hasModal) root.classList.add("note-static");   /* no <dialog>: the note stays inline under the slide */
+
+    /* tokenised once, before the first open, so the body height never
+       changes between a measured and an animated state */
+    view.querySelectorAll(".note-sub, .note-panel p, .note-line li > span, .note-chip > span").forEach(tsPrepare);
+
+    function cancelAnims() {
+      tsCancelIn(view);
+      while (anims.length) { try { anims.pop().cancel(); } catch (e) {} }
+      if (heightAnim) { try { heightAnim.cancel(); } catch (e2) {} heightAnim = null; }
+      body.style.height = "";
+    }
+    function run(el, kf, opts) {
+      if (!el || !el.animate || reduced()) return;
+      var a = el.animate(kf, opts);
+      anims.push(a);
+      var drop = function () { var i = anims.indexOf(a); if (i >= 0) anims.splice(i, 1); };
+      a.onfinish = drop; a.oncancel = drop;
+    }
+    function moveInk(immediate) {
+      var b = tabs[cur];
+      if (!ink || !b) return;
+      if (immediate) ink.style.transition = "none";
+      ink.style.width = b.offsetWidth + "px";
+      ink.style.height = b.offsetHeight + "px";
+      ink.style.transform = "translate(" + b.offsetLeft + "px," + b.offsetTop + "px)";
+      if (immediate) { void ink.offsetWidth; ink.style.transition = ""; }
+    }
+    function choreographPanel(panel, delay0) {
+      if (!panel || reduced()) return;
+      var items = Array.prototype.slice.call(panel.querySelectorAll(":scope > p, :scope > ol > li, :scope > .note-cap, :scope > .note-chips > li"));
+      items.forEach(function (node, i) {
+        var text = node.matches("li") ? node.querySelector(":scope > span") : node;
+        if (text) tsStream(text, { delay: delay0 + Math.min(i, 4) * 40, window: 380, duration: 260 });
+        run(node, [
+          { opacity: 0.12, transform: "translate3d(10px, 6px, 0)" },
+          { opacity: 1, transform: "translate3d(0, 0, 0)" }
+        ], { duration: 380, delay: delay0 + Math.min(i, 4) * 26, easing: EASE, fill: "backwards" });
+      });
+    }
+    function applyTab(i) {
+      cur = i;
+      tabs.forEach(function (b, k) {
+        b.setAttribute("aria-selected", k === i ? "true" : "false");
+        b.tabIndex = k === i ? 0 : -1;
+      });
+      panels.forEach(function (p, k) {
+        p.classList.toggle("is-on", k === i);
+        if (k === i) p.removeAttribute("aria-hidden"); else p.setAttribute("aria-hidden", "true");
+      });
+    }
+    function select(i, focus) {
+      if (i < 0 || i >= tabs.length) return;
+      var changed = i !== cur;
+      if (changed) {
+        cancelAnims();
+        var from = body.getBoundingClientRect().height;
+        applyTab(i);
+        var to = body.getBoundingClientRect().height;
+        if (!reduced() && body.animate && from && to && Math.abs(to - from) >= 2) {
+          heightAnim = body.animate([{ height: from.toFixed(1) + "px" }, { height: to.toFixed(1) + "px" }],
+            { duration: 380, easing: EASE });
+          var release = function () { heightAnim = null; body.style.height = ""; };
+          heightAnim.onfinish = release; heightAnim.oncancel = release;
+        }
+        choreographPanel(panels[i], 0);
+      }
+      moveInk(false);
+      if (focus) tabs[i].focus({ preventScroll: true });
+    }
+    function choreographOpen() {
+      if (reduced()) return;
+      var kicker = view.querySelector(".note-kicker");
+      var title = view.querySelector(".note-title");
+      var sub = view.querySelector(".note-sub");
+      if (kicker) run(kicker, [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 360, delay: 40, easing: EASE, fill: "backwards" });
+      if (title) tsWipe(title, { delay: 70, duration: 520 });
+      if (sub) tsStream(sub, { delay: 160, window: 420, duration: 280, soft: true });
+      var row = view.querySelector(".note-tabs");
+      if (row) run(row, [{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], { duration: 420, delay: 120, easing: EASE, fill: "backwards" });
+      choreographPanel(panels[cur], 190);
+      var foot = view.querySelector(".note-foot");
+      if (foot) run(foot, [{ opacity: 0 }, { opacity: 1 }], { duration: 420, delay: 300, easing: "ease", fill: "backwards" });
+    }
+    function seatScene() {
+      /* a /#nominative deep link lands on a closed dialog (no box, so no
+         fragment scroll): seat slide 9 behind the note so closing it
+         leaves the reader at the paragraph the note belongs to */
+      if (!scene) return;
+      scrollNow(Math.max(0, Math.min(maxScroll(), docTop(scene) - TOP_OFFSET)));
+    }
+    function open(opts) {
+      if (isOpen || !hasModal || view.open) return;
+      var o = opts || {};
+      isOpen = true;
+      opener = o.from && o.from.focus ? o.from : null;
+      restorePopY = null;
+      if (o.seat) seatScene();
+      savedY = window.scrollY || root.scrollTop || 0;
+      clearTimeout(closeT);
+      cancelAnims();
+      root.classList.add("note-lock");
+      try { view.showModal(); } catch (e) { root.classList.remove("note-lock"); isOpen = false; return; }
+      card.scrollTop = 0;
+      applyTab(cur);
+      moveInk(true);
+      try { card.focus({ preventScroll: true }); } catch (e2) { card.focus(); }
+      if (reduced()) view.classList.add("is-in");
+      else { void view.offsetWidth; view.classList.add("is-in"); }
+      choreographOpen();
+      pushed = false;
+      if (!o.silent) {
+        try { history.pushState({ mfaNote: 1 }, "", HASH); pushed = true; } catch (e3) { pushed = false; }
+      }
+    }
+    /* idempotent: after our own close() and again on the engine's close
+       event, so the lock never outlives the dialog */
+    function settle() {
+      clearTimeout(closeT);
+      view.classList.remove("is-in");
+      root.classList.remove("note-lock");
+      cancelAnims();
+      var back = opener;
+      opener = null;
+      if (back && document.contains(back)) {
+        try { back.focus({ preventScroll: true }); } catch (e) { back.focus(); }
+      }
+    }
+    /* history bookkeeping shared by every close path: our own entry is
+       popped, a foreign #nominative is replaced, a Back-driven close
+       leaves the address alone */
+    function unwind(fromHistory) {
+      if (pushed && !fromHistory) {
+        pushed = false;
+        restorePopY = savedY;
+        try { history.back(); } catch (e) { restorePopY = null; }
+      } else if (!pushed && !fromHistory && location.hash === HASH) {
+        try { history.replaceState(null, "", location.pathname + location.search); } catch (e2) {}
+      }
+      pushed = false;
+    }
+    function close(fromHistory) {
+      if (!isOpen) return;
+      isOpen = false;
+      view.classList.remove("is-in");
+      var fin = function () { if (view.open) view.close(); settle(); };
+      clearTimeout(closeT);
+      if (reduced()) fin(); else closeT = setTimeout(fin, 330);
+      unwind(fromHistory);
+    }
+
+    doors.forEach(function (d) {
+      d.addEventListener("click", function (e) {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return;
+        e.preventDefault();
+        if (!hasModal) { seatScene(); return; }   /* no <dialog>: the note is already inline below */
+        open({ from: d });
+      });
+    });
+    view.addEventListener("click", function (e) {
+      if (e.target === view) { close(false); return; }
+      var c = e.target.closest ? e.target.closest("[data-note-close]") : null;
+      if (c) close(false);
+    });
+    view.addEventListener("touchmove", function (e) { if (e.target === view) e.preventDefault(); }, { passive: false });
+    view.addEventListener("cancel", function (e) {
+      e.preventDefault();
+      if (isOpen && view.classList.contains("is-in")) { close(false); return; }
+      clearTimeout(closeT);
+      if (view.open) view.close();
+      settle();
+      isOpen = false;
+    });
+    view.addEventListener("close", function () {
+      if (printing) return;
+      if (isOpen) { isOpen = false; unwind(false); }   /* closed by the engine itself */
+      settle();
+    });
+    view.addEventListener("keydown", function (e) {
+      if (e.key !== "Tab") return;
+      var list = Array.prototype.filter.call(view.querySelectorAll('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'), function (el) {
+        return !el.hidden && el.tabIndex >= 0 && el.getClientRects().length > 0 && !el.closest('[aria-hidden="true"]');
+      });
+      if (!list.length) return;
+      var first = list[0], last = list[list.length - 1], a = document.activeElement;
+      if (e.shiftKey) {
+        if (a === first || !a || !view.contains(a) || a === card) { e.preventDefault(); last.focus(); }
+      } else if (a === last) { e.preventDefault(); first.focus(); }
+    });
+    tabs.forEach(function (b, i) {
+      b.addEventListener("click", function () { select(i, false); });
+      b.addEventListener("keydown", function (e) {
+        var n = -1, count = tabs.length;
+        if (e.key === "ArrowLeft") n = (i + 1) % count;          /* RTL: left is forward */
+        else if (e.key === "ArrowRight") n = (i - 1 + count) % count;
+        else if (e.key === "Home") n = 0;
+        else if (e.key === "End") n = count - 1;
+        else return;
+        e.preventDefault();
+        select(n, true);
+      });
+    });
+    /* a flick across the body turns the tab (RTL: a flick to the right is "next") */
+    var tX = 0, tY = 0, tT = 0;
+    body.addEventListener("touchstart", function (e) {
+      if (e.touches.length !== 1) return;
+      tX = e.touches[0].clientX; tY = e.touches[0].clientY; tT = Date.now();
+    }, { passive: true });
+    body.addEventListener("touchend", function (e) {
+      var t = e.changedTouches && e.changedTouches[0];
+      if (!t || !tT) return;
+      var dx = t.clientX - tX, dy = t.clientY - tY, dt = Date.now() - tT;
+      tT = 0;
+      if (dt > 700 || Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+      select(dx > 0 ? Math.min(cur + 1, tabs.length - 1) : Math.max(cur - 1, 0), false);
+    }, { passive: true });
+    window.addEventListener("resize", function () { if (isOpen) moveInk(true); }, { passive: true });
+    window.addEventListener("popstate", function () {
+      if (restorePopY !== null && !isOpen && location.hash !== HASH) {
+        var y = restorePopY;
+        restorePopY = null;
+        scrollNow(y);
+        return;
+      }
+      restorePopY = null;
+      if (location.hash === HASH) {
+        /* Back / Forward onto our own entry: the browser restores the scroll
+           the note was opened at; a typed or foreign #nominative gets seated */
+        var own = !!(history.state && history.state.mfaNote);
+        if (!isOpen) open({ silent: true, seat: !own });
+        return;
+      }
+      if (isOpen) close(true);
+    });
+    window.addEventListener("hashchange", function () {
+      if (location.hash === HASH && !isOpen) open({ silent: true, seat: true });
+    });
+    /* paper: the note leaves the top layer for the print and comes back
+       afterwards (its own print rule hides it, but the scroll lock and
+       the modal state must not be what the printer sees) */
+    var printing = false;
+    window.addEventListener("beforeprint", function () {
+      if (!isOpen || !view.open) return;
+      printing = true;
+      root.classList.remove("note-lock");
+      view.close();
+    });
+    window.addEventListener("afterprint", function () {
+      if (!printing) return;
+      printing = false;
+      if (!isOpen) return;
+      try { view.showModal(); root.classList.add("note-lock"); view.classList.add("is-in"); }
+      catch (e) { isOpen = false; unwind(false); settle(); }
+    });
+    /* a shared link that ends in #nominative opens the note over slide 9 */
+    if (location.hash === HASH) {
+      open({ silent: true, seat: true });
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { if (isOpen) seatScene(); });
+    }
+
+    window.__note = {
+      open: function () { open({ from: doors[0] || null }); },
+      close: function () { close(false); },
+      go: function (i) { select(i, false); },
+      isOpen: function () { return isOpen; },
+      tab: function () { return cur; },
+      docScroll: function () { return savedY; }
     };
   })();
 

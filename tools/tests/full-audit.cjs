@@ -23,7 +23,17 @@
         guard, async-clipboard copy and its execCommand fallback, the native
         share sheet (present / absent / dismissed / refused), reduced
         motion, phones (tap, 390 and 320 fit, hidden top-bar pill, /#share
-        deep link), print and no-JS fallbacks. */
+        deep link), print and no-JS fallbacks.
+     7) Slide-9 margin note (.note-door + dialog#nominative, «جبر نامی»):
+        structure and ARIA (tablist, roving tabindex, nothing inside the
+        translation boxes), door → dialog with history entry, Esc two-stage
+        exit, backdrop / close / back exits, focus return, arrow-key guard,
+        mouse and keyboard tabs (RTL arrows, Home / End), ink alignment,
+        height morph, retained tab, Tab containment, Back / Forward and the
+        /#nominative deep link seated on slide 9, reduced motion, phones
+        (bottom sheet, one-row tabs, flick, 320 fit, landscape compact head),
+        desktop fit without inner scroll, beforeprint / afterprint, print
+        and no-JS fallbacks. */
 const assert = require('node:assert/strict');
 const { execSync } = require('node:child_process');
 const puppeteer = require('puppeteer-core');
@@ -395,14 +405,14 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         allJustified,
         pdfOk: pdfRes.status === 200 && pdfBuf.byteLength === 921399,
         zpdReady: window.__rail.zpd().pinned === true,
-        cacheSynced: cacheTags.every(t => t && t.includes('?v=20261024c'))
+        cacheSynced: cacheTags.every(t => t && t.includes('?v=20261024d'))
       };
     });
     ok(deckAudit.exactOrder, 'all 29 scenes (#s2..#s30) present in exact PDF order');
     ok(deckAudit.allJustified, 'every slide translation & original paragraph remains text-align: justify');
     ok(deckAudit.pdfOk, 'assets/Mathematics-For-All.pdf serves 200 OK with exact 921,399 bytes');
     ok(deckAudit.zpdReady, 'Slide 23 (#s23) ZPD ScrollTrigger pin active and healthy');
-    ok(deckAudit.cacheSynced, 'style.css, app.js, and summary.js share unified cache-buster ?v=20261024c');
+    ok(deckAudit.cacheSynced, 'style.css, app.js, and summary.js share unified cache-buster ?v=20261024d');
 
     /* Verify #hero velvet opening choreography, Bidi Latin run order, & zero resting GPU layers */
     await deckPage.waitForFunction(() => window.__heroMotion && !window.__heroMotion.stats().animating, { timeout: 4000 });
@@ -1044,6 +1054,384 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         await page.close();
       }
       ok(errors.length === 0, `zero JS / console errors across the share QA: ${errors.join('; ')}`);
+    }
+
+    /* ======================================================================
+       PART 7: Slide-9 margin note — «جبر نامی» door + compact aside
+       ====================================================================== */
+    {
+      const errors = [];
+      const fresh = async (w, h, mobile, opts = {}) => {
+        const page = await browser.newPage();
+        page.on('pageerror', e => errors.push(e.message));
+        page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+        await page.setViewport({ width: w, height: h, deviceScaleFactor: 1, isMobile: !!mobile, hasTouch: !!mobile });
+        if (opts.init) await page.evaluateOnNewDocument(opts.init);
+        if (opts.media) await page.emulateMediaFeatures(opts.media);
+        await page.goto(base + (opts.hash || ''), { waitUntil: 'networkidle0' });
+        await page.evaluate(() => document.fonts.ready);
+        await delay(400);
+        return page;
+      };
+      const state = page => page.evaluate(() => {
+        const d = document.getElementById('nominative');
+        const a = document.activeElement;
+        return {
+          open: d.open, isIn: d.classList.contains('is-in'),
+          lock: document.documentElement.classList.contains('note-lock'),
+          active: a ? (a.id || a.className.split(' ')[0] || a.tagName) : '',
+          door: !!(a && a.hasAttribute('data-note-open')),
+          hash: location.hash, y: Math.round(scrollY),
+          tab: window.__note.tab(), api: window.__note.isOpen(),
+          selected: [...document.querySelectorAll('#nominative .note-tab')].map(t => t.getAttribute('aria-selected') === 'true'),
+          shown: [...document.querySelectorAll('#nominative .note-panel')].map(p => p.classList.contains('is-on') && !p.hasAttribute('aria-hidden') && getComputedStyle(p).visibility !== 'hidden')
+        };
+      });
+      const toDoor = async page => {
+        await page.evaluate(() => document.querySelector('#s9 .note-door').scrollIntoView({ block: 'center', behavior: 'instant' }));
+        try { await page.waitForFunction(() => { const d = document.querySelector('#s9 .note-door'); return d.classList.contains('in') && getComputedStyle(d).opacity === '1' && getComputedStyle(d).transform === 'none'; }, { timeout: 4000, polling: 50 }); } catch (e) { /* asserted below */ }
+        await delay(150);
+      };
+      const settled = async (page, want) => {
+        try {
+          await page.waitForFunction((want) => {
+            const d = document.getElementById('nominative');
+            const lock = document.documentElement.classList.contains('note-lock');
+            if (want !== 'in') return !d.open && !lock && !d.classList.contains('is-in');
+            const card = d.querySelector('.note-card');
+            return d.open && d.classList.contains('is-in') && lock && getComputedStyle(card).transform === 'none';
+          }, { timeout: 2500, polling: 40 }, want);
+        } catch (e) { /* the assertion that follows reports the real state */ }
+      };
+      /* the ink glides on a CSS transition: wait until it sits on the selected tab */
+      const inkOn = async (page, i) => {
+        try {
+          await page.waitForFunction((i) => {
+            const t = document.getElementById('noteTab' + i).getBoundingClientRect();
+            const k = document.querySelector('#nominative .note-ink').getBoundingClientRect();
+            return Math.abs(t.left - k.left) < 1 && Math.abs(t.width - k.width) < 1 && Math.abs(t.top - k.top) < 1 && Math.abs(t.height - k.height) < 1;
+          }, { timeout: 2500, polling: 40 }, i);
+          return true;
+        } catch (e) { return false; }
+      };
+
+      /* 7A — structure: a door after the slide, a labelled dialog with a
+         real tablist, nothing of it inside the translation boxes */
+      {
+        const page = await fresh(1366, 768, false);
+        const st = await page.evaluate(() => {
+          const s9 = document.getElementById('s9');
+          const door = s9.querySelector('.note-door');
+          const d = document.getElementById('nominative');
+          const tabs = [...d.querySelectorAll('[role="tab"]')];
+          const panels = [...d.querySelectorAll('[role="tabpanel"]')];
+          const kids = [...s9.querySelector('.wrap').children];
+          const byId = id => !!(id && document.getElementById(id));
+          return {
+            doorOk: !!door && door.tagName === 'A' && door.getAttribute('href') === '#nominative' && door.hasAttribute('data-note-open')
+              && door.getAttribute('aria-haspopup') === 'dialog' && door.getAttribute('aria-controls') === 'nominative' && byId(door.getAttribute('aria-describedby')),
+            doorAfterFoot: kids.findIndex(k => k.querySelector && k.querySelector('.note-door')) > kids.findIndex(k => k.classList.contains('fnbar') || (k.querySelector && k.querySelector('.fnbar'))),
+            dialogOk: d.tagName === 'DIALOG' && d.closest('#s9') === s9 && d.getAttribute('aria-labelledby') === 'noteTitle' && byId('noteTitle'),
+            tablist: d.querySelector('[role="tablist"]') && d.querySelector('[role="tablist"]').getAttribute('aria-label') && tabs.length === 3 && panels.length === 3,
+            wired: tabs.every((t, i) => t.getAttribute('aria-controls') === panels[i].id && panels[i].getAttribute('aria-labelledby') === t.id),
+            roving: tabs.filter(t => t.getAttribute('aria-selected') === 'true').length === 1 && tabs.every(t => (t.getAttribute('aria-selected') === 'true') === (t.tabIndex === 0)),
+            hiddenPanels: panels.every(p => p.classList.contains('is-on') === !p.hasAttribute('aria-hidden')) && panels.filter(p => p.classList.contains('is-on')).length === 1,
+            titles: panels.every(p => p.getAttribute('data-title') && p.getAttribute('data-title') === document.getElementById(p.getAttribute('aria-labelledby')).textContent.trim()),
+            insideBoxes: s9.querySelectorAll('.card .note-door, .card .note-view, .fnbar .note-door, .fnbar .note-view, .card [class^="note-"]').length,
+            boxes: [...s9.querySelectorAll('.card.boxin-fa, .card.boxin-en')].length,
+            mainText: s9.querySelector('.card.boxin-fa').textContent,
+            english: [...d.querySelectorAll('.note-en')].every(e => e.getAttribute('lang') === 'en' && e.getAttribute('dir') === 'ltr'),
+            ext: [...d.querySelectorAll('a[target="_blank"]')].every(a => /noopener/.test(a.rel)),
+            closeLabel: d.querySelector('[data-note-close].note-close').getAttribute('aria-label'),
+            decor: [...d.querySelectorAll('.note-ink, .note-grip, .note-cap, svg')].every(e => !!e.closest('[aria-hidden="true"]')),
+            marks: [...d.querySelectorAll('p, .note-line span')].filter(el => /\u0651/.test(el.textContent) && /\u064f/.test(el.textContent)).length,
+            pdfLinks: [...document.querySelectorAll('a[href$=".pdf"]')].length
+          };
+        });
+        ok(st.doorOk, 'the door is a real link to #nominative with popup / controls / description semantics');
+        ok(st.doorAfterFoot, 'the door sits after the footnote bar, below the slide');
+        ok(st.dialogOk && st.tablist && st.wired, 'a labelled <dialog> inside #s9 with a three-tab tablist wired to its panels');
+        ok(st.roving && st.hiddenPanels && st.titles, 'roving tabindex, one selected tab, one shown panel, data-title mirrors each tab label');
+        ok(st.insideBoxes === 0 && st.boxes === 2, 'nothing of the note lives inside the translation boxes or the footnote bar');
+        ok(!/اشتکل|سیمونسون|نوتین|پلهام/.test(st.mainText), 'the aside\'s content never leaks into the main Persian text');
+        ok(st.english && st.ext, 'Latin runs are isolated (lang=en, dir=ltr); outbound links carry rel=noopener');
+        ok(st.closeLabel === 'بستن حاشیه' && st.decor, 'the close button is labelled; ink, grip, caption and icons are hidden from AT');
+        ok(st.marks === 0, 'no paragraph mixes shadda and damma (B Nazanin shapes such runs as one unbreakable line)');
+        await page.close();
+      }
+
+      /* 7B — desktop: door → dialog, exits, focus, history, tabs, keys */
+      {
+        const page = await fresh(1366, 768, false);
+        await toDoor(page);
+        let s = await state(page);
+        ok(!s.open && !s.lock && !s.isIn && !s.api, 'the note starts closed and unlocked');
+        const revealed = await page.evaluate(() => { const d = document.querySelector('#s9 .note-door'); return d.classList.contains('in') && getComputedStyle(d).opacity === '1'; });
+        ok(revealed, 'the door takes part in the reveal system (.rv → .in)');
+        const yDoor = s.y;
+        await page.click('#s9 .note-door'); await settled(page, 'in');
+        s = await state(page);
+        ok(s.open && s.isIn && s.lock && s.api, 'a click on the door opens the note (open + is-in + note-lock)');
+        ok(Math.abs(s.y - yDoor) <= 1, `the page does not move under the note (${s.y} vs ${yDoor})`);
+        ok(s.hash === '#nominative' && (await page.evaluate(() => history.state && history.state.mfaNote === 1)), 'opening pushes one history entry (#nominative)');
+        ok(s.active === 'note-card', `focus moves into the card (${s.active})`);
+        ok(s.selected[0] && s.shown[0] && !s.shown[1] && !s.shown[2], 'the first tab is selected and only its panel is shown');
+        ok(await inkOn(page, 0), 'the ink sits exactly on the selected tab');
+        const anim = await page.evaluate(() => document.getElementById('nominative').getAnimations({ subtree: true }).length);
+        ok(anim > 0, `the entrance is choreographed (${anim} running animations right after open)`);
+        await page.keyboard.press('ArrowDown'); await page.keyboard.press('PageDown'); await delay(500);
+        s = await state(page);
+        ok(s.open && Math.abs(s.y - yDoor) <= 1, 'arrow / page keys do not drive the deck while the note is open');
+
+        /* Esc: exit first, then closed, hash popped, focus on the door */
+        await page.keyboard.press('Escape'); await delay(80);
+        s = await state(page);
+        ok(s.open && !s.isIn, 'Esc plays the exit transition first (still open, is-in dropped)');
+        await settled(page, 'out');
+        await delay(250);
+        s = await state(page);
+        ok(!s.open && !s.lock && !s.isIn && !s.api, 'closed, unlocked and clean after the exit');
+        ok(s.hash === '' && s.door, `the hash is popped and focus returns to the door (${s.hash || 'no hash'}, ${s.active})`);
+        ok(Math.abs(s.y - yDoor) <= 2, `the reader is still where the door is (${s.y} vs ${yDoor})`);
+
+        /* second Esc mid-exit closes at once */
+        await page.click('#s9 .note-door'); await settled(page, 'in');
+        await page.keyboard.press('Escape'); await delay(30); await page.keyboard.press('Escape'); await delay(60);
+        s = await state(page);
+        ok(!s.open && !s.lock && !s.isIn, 'a second Esc during the exit closes at once and cleans up synchronously');
+        await delay(250);
+
+        /* backdrop, close button, back button */
+        await page.click('#s9 .note-door'); await settled(page, 'in');
+        await page.mouse.click(30, 400); await settled(page, 'out'); await delay(250);
+        s = await state(page);
+        ok(!s.open && !s.lock && s.door, 'a click on the backdrop closes and focus returns to the door');
+        await page.click('#s9 .note-door'); await settled(page, 'in');
+        await page.click('#nominative .note-close'); await settled(page, 'out'); await delay(250);
+        ok(!(await state(page)).open, 'the close button closes');
+        await page.click('#s9 .note-door'); await settled(page, 'in');
+        await page.click('#nominative .note-back'); await settled(page, 'out'); await delay(250);
+        s = await state(page);
+        ok(!s.open && s.hash === '' && s.door, 'the «back to slide 9» button closes, pops the hash and hands focus back');
+
+        /* tabs by mouse: panel swap, ink, height morph, retained on reopen */
+        await page.click('#s9 .note-door'); await settled(page, 'in');
+        await page.click('#noteTab1'); await delay(40);
+        const morph = await page.evaluate(() => document.querySelector('#nominative [data-note-body]').getAnimations().length);
+        s = await state(page);
+        ok(s.tab === 1 && s.selected[1] && s.shown[1] && !s.shown[0] && !s.shown[2], 'clicking the second tab swaps the panel (aria-selected, aria-hidden, .is-on)');
+        ok(morph >= 1, 'the body height morphs between panels (WAAPI)');
+        ok(await inkOn(page, 1), 'the ink glides onto the second tab');
+        const lineUp = await page.evaluate(() => {
+          const rows = [...document.querySelectorAll('#notePanel1 .note-line li')];
+          const rail = getComputedStyle(document.querySelector('#notePanel1 .note-line'), '::before');
+          return { years: rows.every(li => /^[۰-۹]{4}$/.test(li.querySelector('b').textContent)), rail: rail.width !== '0px' && rail.content !== 'none', n: rows.length };
+        });
+        ok(lineUp.n === 4 && lineUp.years && lineUp.rail, 'the timeline has four dated rows on a drawn rail');
+        await page.click('#noteTab2'); await delay(500);
+        s = await state(page);
+        ok(s.tab === 2 && s.shown[2] && (await inkOn(page, 2)), 'the third tab shows the verdict panel');
+        await page.keyboard.press('Escape'); await settled(page, 'out'); await delay(250);
+        await page.click('#s9 .note-door'); await settled(page, 'in');
+        s = await state(page);
+        ok(s.tab === 2 && s.shown[2] && (await inkOn(page, 2)), 'reopening keeps the last tab and seats the ink on it without a glide');
+
+        /* keyboard on the tablist: RTL arrows, Home / End, roving focus */
+        await page.focus('#noteTab2');
+        await page.keyboard.press('Home'); await delay(450);
+        s = await state(page);
+        ok(s.tab === 0 && s.active === 'noteTab0', `Home selects and focuses the first tab (${s.active})`);
+        await page.keyboard.press('ArrowLeft'); await delay(450);
+        s = await state(page);
+        ok(s.tab === 1 && s.active === 'noteTab1', 'ArrowLeft moves forward in RTL');
+        await page.keyboard.press('ArrowRight'); await delay(450);
+        s = await state(page);
+        ok(s.tab === 0 && s.active === 'noteTab0', 'ArrowRight moves back');
+        await page.keyboard.press('ArrowRight'); await delay(450);
+        s = await state(page);
+        ok(s.tab === 2, 'the arrows wrap around the ends');
+        await page.keyboard.press('End'); await page.keyboard.press('Home'); await delay(450);
+        const roving = await page.evaluate(() => [...document.querySelectorAll('#nominative .note-tab')].map(t => t.tabIndex));
+        ok(roving.join(',') === '0,-1,-1', `only the selected tab is in the Tab order (${roving.join(',')})`);
+
+        /* Tab trap: close → tab → source link → back → close */
+        await page.evaluate(() => document.querySelector('#nominative .note-card').focus());
+        const trail = [];
+        for (let i = 0; i < 6; i++) {
+          await page.keyboard.press('Tab');
+          trail.push(await page.evaluate(() => { const a = document.activeElement; return a.closest('#nominative') ? (a.id || a.className.split(' ')[0]) : 'OUT'; }));
+        }
+        ok(trail.every(t => t !== 'OUT') && trail[0] === 'note-close' && trail[1] === 'noteTab0' && trail[4] === 'note-close', `Tab cycles close → tab → source → back → close and never leaves the note (${trail.join(' → ')})`);
+        await page.evaluate(() => document.querySelector('#nominative .note-close').focus());
+        await page.keyboard.down('Shift'); await page.keyboard.press('Tab'); await page.keyboard.up('Shift');
+        ok((await page.evaluate(() => document.activeElement.className.split(' ')[0])) === 'note-back', 'Shift+Tab from the close button wraps to the back button');
+        await page.keyboard.press('Escape'); await settled(page, 'out'); await delay(250);
+
+        /* history: Back closes, Forward reopens over slide 9, deep link seats */
+        await page.click('#s9 .note-door'); await settled(page, 'in');
+        await page.goBack(); await settled(page, 'out'); await delay(300);
+        s = await state(page);
+        ok(!s.open && !s.lock && s.hash === '' && Math.abs(s.y - yDoor) <= 2, `browser Back closes the note and leaves the reader at the door (${s.y} vs ${yDoor})`);
+        await page.goForward(); await settled(page, 'in'); await delay(300);
+        s = await state(page);
+        ok(s.open && s.isIn && s.hash === '#nominative' && Math.abs(s.y - yDoor) <= 2, `browser Forward reopens the note where it was opened (${s.y} vs ${yDoor})`);
+        await page.keyboard.press('Escape'); await settled(page, 'out'); await delay(250);
+        s = await state(page);
+        ok(!s.open && s.hash === '' && Math.abs(s.y - yDoor) <= 2, 'closing a re-entered note strips the hash in place');
+        await page.close();
+
+        const deep = await fresh(1366, 768, false, { hash: '#nominative' });
+        await settled(deep, 'in'); await delay(900);
+        s = await state(deep);
+        const top9 = await deep.evaluate(() => Math.round(document.getElementById('s9').getBoundingClientRect().top));
+        ok(s.open && s.isIn && s.lock && top9 >= 60 && top9 <= 90, `/#nominative opens the note over slide 9 (top ${top9}px)`);
+        await deep.keyboard.press('Escape'); await settled(deep, 'out'); await delay(250);
+        s = await state(deep);
+        ok(!s.open && s.hash === '' && Math.abs((await deep.evaluate(() => Math.round(document.getElementById('s9').getBoundingClientRect().top))) - top9) <= 2, 'closing a deep-linked note strips the hash and keeps slide 9 in place');
+        await deep.close();
+      }
+
+      /* 7C — reduced motion: instant, no choreography, no ping rings */
+      {
+        const page = await fresh(1366, 768, false, { media: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+        await toDoor(page);
+        const ping = await page.evaluate(() => getComputedStyle(document.querySelector('.note-door-mark'), '::before').animationName);
+        ok(ping === 'none', `reduced motion: the door mark does not ping (${ping})`);
+        await page.click('#s9 .note-door'); await delay(60);
+        let s = await state(page);
+        const anim = await page.evaluate(() => document.getElementById('nominative').getAnimations({ subtree: true }).length);
+        ok(s.open && s.isIn && s.lock && anim === 0, `reduced motion: opens instantly without choreography (${anim} animations)`);
+        await page.click('#noteTab1'); await delay(60);
+        s = await state(page);
+        ok(s.tab === 1 && s.shown[1] && (await page.evaluate(() => document.querySelector('#nominative [data-note-body]').getAnimations().length)) === 0, 'reduced motion: tabs swap without the height morph');
+        await page.keyboard.press('Escape'); await delay(60);
+        s = await state(page);
+        ok(!s.open && !s.lock && s.door, 'reduced motion: closes instantly, unlocks and returns focus');
+        await page.close();
+      }
+
+      /* 7D — phones: tap, bottom sheet, one-line tabs, flick, landscape, 320 */
+      {
+        let page = await fresh(390, 844, true);
+        await toDoor(page);
+        const doorFit = await page.evaluate(() => { const r = document.querySelector('#s9 .note-door').getBoundingClientRect(); const cta = document.querySelector('.note-door-cta').getBoundingClientRect(); return { inside: r.left >= 0 && r.right <= innerWidth, ctaH: Math.round(cta.height), docW: document.documentElement.scrollWidth <= innerWidth }; });
+        ok(doorFit.inside && doorFit.docW && doorFit.ctaH >= 40, `the door fits a 390px phone with a thumb-sized pill (${doorFit.ctaH}px)`);
+        await page.tap('#s9 .note-door'); await settled(page, 'in');
+        let s = await state(page);
+        ok(s.open && s.isIn && s.lock, 'a tap on the door opens the note on a phone');
+        const sheet = await page.evaluate(() => {
+          const card = document.querySelector('#nominative .note-card'); const r = card.getBoundingClientRect();
+          const tabs = [...document.querySelectorAll('#nominative .note-tab')];
+          const tops = tabs.map(t => Math.round(t.getBoundingClientRect().top));
+          return { bottom: Math.round(innerHeight - r.bottom), left: Math.round(r.left), width: Math.round(r.width), grip: getComputedStyle(document.querySelector('.note-grip')).display, oneRow: Math.max(...tops) - Math.min(...tops) <= 1, tabsFit: tabs.every(t => t.scrollWidth <= t.clientWidth + 0.5), scrolls: card.scrollHeight > card.clientHeight, radiusTop: getComputedStyle(card).borderTopLeftRadius, radiusBottom: getComputedStyle(card).borderBottomLeftRadius, justify: getComputedStyle(document.querySelector('#notePanel0 p')).textAlign };
+        });
+        ok(sheet.bottom <= 1 && sheet.left === 0 && sheet.width === 390 && sheet.grip !== 'none', `the note becomes a bottom sheet (edge to edge, grip shown, ${sheet.bottom}px from the bottom)`);
+        ok(sheet.oneRow && sheet.tabsFit, 'the three tab labels share one row without clipping');
+        ok(sheet.radiusBottom === '0px' && sheet.radiusTop !== '0px', 'the sheet is rounded at the top only');
+        ok(sheet.justify === 'start', 'casual prose is start-aligned on phones (no justification rivers)');
+        /* flick across the body: in RTL a flick to the right is "next" */
+        const b = await page.evaluate(() => { const r = document.querySelector('#nominative [data-note-body]').getBoundingClientRect(); return { x: r.left + 40, y: r.top + Math.min(80, r.height / 2) }; });
+        /* three CDP round trips stand in for one finger; a gesture the slow
+           harness stretches past the 700ms flick budget is retried */
+        const flick = async (x0, x1, dy, want) => {
+          let took = -1;
+          for (let n = 0; n < 4; n++) {
+            const t0 = Date.now();
+            await page.touchscreen.touchStart(x0, b.y); await page.touchscreen.touchMove(x1, b.y + dy); await page.touchscreen.touchEnd();
+            took = Date.now() - t0;
+            await delay(450);
+            if ((await page.evaluate(() => window.__note.tab())) === want || took <= 650) break;
+          }
+          return took;
+        };
+        const f1 = await flick(b.x, b.x + 140, 4, 1);
+        s = await state(page);
+        ok(s.tab === 1 && s.shown[1], `a flick to the right turns to the next tab (gesture ${f1}ms)`);
+        const f2 = await flick(b.x + 160, b.x + 20, -3, 0);
+        s = await state(page);
+        ok(s.tab === 0 && s.shown[0], `a flick to the left turns back (gesture ${f2}ms)`);
+        await page.touchscreen.touchStart(b.x + 60, b.y); await page.touchscreen.touchMove(b.x + 70, b.y + 120); await page.touchscreen.touchEnd(); await delay(300);
+        ok((await state(page)).tab === 0, 'a vertical drag (scrolling) does not turn the tab');
+        await page.tap('#nominative .note-close'); await settled(page, 'out'); await delay(250);
+        s = await state(page);
+        ok(!s.open && !s.lock && s.hash === '', 'a tap on the close button closes the sheet and pops the hash');
+        await page.close();
+
+        page = await fresh(320, 568, true);
+        await toDoor(page);
+        const over = await page.evaluate(() => {
+          const out = [];
+          document.querySelectorAll('#s9 .note-door, #s9 .note-door *').forEach(el => { const r = el.getBoundingClientRect(); if (r.width && (r.left < -0.5 || r.right > innerWidth + 0.5)) out.push(el.className || el.tagName); });
+          return { out, docW: document.documentElement.scrollWidth, iw: innerWidth };
+        });
+        ok(over.out.length === 0 && over.docW <= over.iw, `the door never overflows a 320px phone (${over.out.join(', ') || 'clean'})`);
+        await page.tap('#s9 .note-door'); await settled(page, 'in');
+        const tiny = await page.evaluate(() => {
+          const card = document.querySelector('#nominative .note-card');
+          const out = [];
+          card.querySelectorAll('*').forEach(el => { const r = el.getBoundingClientRect(); if (r.width && (r.left < -0.5 || r.right > innerWidth + 0.5)) out.push(el.className || el.tagName); });
+          const tabs = [...document.querySelectorAll('#nominative .note-tab')]; const tops = tabs.map(t => Math.round(t.getBoundingClientRect().top));
+          return { out, oneRow: Math.max(...tops) - Math.min(...tops) <= 1, tabsFit: tabs.every(t => t.scrollWidth <= t.clientWidth + 0.5), wide: card.scrollWidth <= card.clientWidth + 0.5 };
+        });
+        ok(tiny.out.length === 0 && tiny.wide && tiny.oneRow && tiny.tabsFit, `the sheet fits 320px: no horizontal overflow, tabs on one row (${tiny.out.join(', ') || 'clean'})`);
+        await page.close();
+
+        page = await fresh(844, 390, true);
+        await page.evaluate(() => window.__note.open()); await settled(page, 'in');
+        const land = await page.evaluate(() => { const card = document.querySelector('#nominative .note-card'); const r = card.getBoundingClientRect(); return { inside: r.top >= 0 && r.bottom <= innerHeight + 0.5, sub: getComputedStyle(document.querySelector('.note-sub')).display, panelTop: Math.round(document.querySelector('#nominative .note-panel.is-on').getBoundingClientRect().top), scrolls: card.scrollHeight > card.clientHeight }; });
+        ok(land.inside && land.sub === 'none' && land.panelTop < 390 * 0.6, `a landscape phone gets a compact head so the panel starts above the fold (panel top ${land.panelTop}px)`);
+        await page.close();
+
+        for (const vp of [{ w: 1366, h: 768 }, { w: 1440, h: 900 }, { w: 1280, h: 720 }]) {
+          page = await fresh(vp.w, vp.h, false);
+          await page.evaluate(() => window.__note.open()); await settled(page, 'in');
+          const fits = [];
+          for (let i = 0; i < 3; i++) {
+            await page.evaluate(i => window.__note.go(i), i); await delay(650);
+            fits.push(await page.evaluate(() => { const card = document.querySelector('#nominative .note-card'); const r = card.getBoundingClientRect(); return { inside: r.top >= 0 && r.bottom <= innerHeight, scrolls: card.scrollHeight > card.clientHeight + 1 }; }));
+          }
+          ok(fits.every(f => f.inside && !f.scrolls), `every tab fits ${vp.w}×${vp.h} without inner scrolling`);
+          await page.close();
+        }
+      }
+
+      /* 7E — print and no-JS: the note never reaches paper; without script
+         it reads inline under the slide */
+      {
+        let page = await fresh(1366, 768, false);
+        await page.evaluate(() => window.__note.open()); await settled(page, 'in');
+        await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+        await delay(60);
+        let pr = await page.evaluate(() => ({ open: document.getElementById('nominative').open, lock: document.documentElement.classList.contains('note-lock'), api: window.__note.isOpen() }));
+        ok(!pr.open && !pr.lock && pr.api, 'beforeprint takes the note out of the top layer and drops the scroll lock');
+        await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+        await delay(60);
+        pr = await page.evaluate(() => ({ open: document.getElementById('nominative').open, lock: document.documentElement.classList.contains('note-lock'), isIn: document.getElementById('nominative').classList.contains('is-in') }));
+        ok(pr.open && pr.lock && pr.isIn, 'afterprint brings the note back where it was');
+        await page.keyboard.press('Escape'); await settled(page, 'out'); await delay(250);
+        await page.emulateMediaType('print');
+        const paper = await page.evaluate(() => { const d = s => getComputedStyle(document.querySelector(s)).display; document.documentElement.classList.add('note-lock'); const ov = getComputedStyle(document.documentElement).overflow; document.documentElement.classList.remove('note-lock'); return { door: d('#s9 .note-door'), view: d('#nominative'), fa: d('#s9 .card.boxin-fa'), en: d('#s9 .card.boxin-en'), ov }; });
+        ok(paper.door === 'none' && paper.view === 'none' && paper.fa !== 'none' && paper.en !== 'none' && paper.ov === 'visible', 'print drops the door and the note and keeps the two translation boxes; a leftover lock cannot clip the paper');
+        await page.close();
+
+        page = await browser.newPage();
+        await page.setJavaScriptEnabled(false);
+        await page.setViewport({ width: 1366, height: 768 });
+        await page.goto(base, { waitUntil: 'networkidle0' });
+        await delay(300);
+        const nj = await page.evaluate(() => {
+          const d = s => { const e = document.querySelector(s); return e ? getComputedStyle(e).display : 'missing'; };
+          const panels = [...document.querySelectorAll('#nominative .note-panel')];
+          return { js: document.documentElement.classList.contains('js'), door: d('#s9 .note-door'), view: d('#nominative'), tabs: d('#nominative .note-tabs'), close: d('#nominative .note-close'), back: d('#nominative .note-back'),
+            panels: panels.every(p => getComputedStyle(p).display !== 'none' && getComputedStyle(p).visibility !== 'hidden' && getComputedStyle(p).position !== 'absolute'),
+            heads: panels.every(p => (getComputedStyle(p, '::before').content || '').indexOf(p.getAttribute('data-title')) >= 0),
+            title: d('#noteTitle'), opacity: getComputedStyle(document.querySelector('#nominative .note-panel p')).opacity };
+        });
+        ok(!nj.js && nj.door === 'none' && nj.view !== 'none' && nj.tabs === 'none' && nj.close === 'none' && nj.back === 'none', 'without JavaScript the door and the script-only controls hide and the note reads inline');
+        ok(nj.panels && nj.heads && nj.title !== 'none' && nj.opacity === '1', 'without JavaScript all three panels show in flow under their own headings');
+        await page.close();
+      }
+      ok(errors.length === 0, `zero JS / console errors across the margin-note QA: ${errors.join('; ')}`);
     }
 
     console.log(`PASS ${checks} full-site audit assertions`);
