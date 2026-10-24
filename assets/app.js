@@ -534,6 +534,19 @@
       shareSettle();
     });
     shareView.addEventListener("close", shareSettle);
+    /* Tab cycles inside the card (the deck behind is inert already; this
+       skips the browser-chrome stop and mirrors the people view) */
+    shareView.addEventListener("keydown", function (e) {
+      if (e.key !== "Tab") return;
+      var list = Array.prototype.filter.call(shareView.querySelectorAll("a[href], button:not([disabled])"), function (el) {
+        return !el.hidden && el.getClientRects().length > 0;
+      });
+      if (!list.length) return;
+      var first = list[0], last = list[list.length - 1], a = document.activeElement;
+      if (e.shiftKey) {
+        if (a === first || !a || !shareView.contains(a) || a.classList.contains("share-view-card")) { e.preventDefault(); last.focus(); }
+      } else if (a === last) { e.preventDefault(); first.focus(); }
+    });
     /* a click on the backdrop reaches the dialog element itself */
     shareView.addEventListener("click", function (e) { if (e.target === shareView) shareClose(); });
     shareView.addEventListener("touchmove", function (e) { if (e.target === shareView) e.preventDefault(); }, { passive: false });

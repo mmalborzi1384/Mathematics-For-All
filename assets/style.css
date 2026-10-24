@@ -1466,6 +1466,7 @@ html.ppl-lock { overflow: hidden; }
    buttons (~310px), so a short laptop never has to scroll the card */
 .share-view-qr {
   display: block; width: min(62vmin, 400px); max-width: 100%; height: auto; aspect-ratio: 1;
+  width: max(160px, min(62vmin, 400px, calc(94vh - 310px)));
   width: max(160px, min(62vmin, 400px, calc(94svh - 310px)));
   margin: 18px auto 0; padding: 10px; background: #FFFFFF; border: 1.5px solid var(--line); border-radius: 20px;
 }
@@ -1482,7 +1483,7 @@ html.ppl-lock { overflow: hidden; }
     column-gap: 22px; align-items: center; text-align: start; padding: 20px 22px;
   }
   /* the code goes to the inline end, clear of the close button at the start */
-  .share-view-qr { grid-column: 2; grid-row: 1 / span 4; margin: 0; width: max(160px, min(calc(100svh - 110px), 320px)); }
+  .share-view-qr { grid-column: 2; grid-row: 1 / span 4; margin: 0; width: max(160px, min(calc(100vh - 110px), 320px)); width: max(160px, min(calc(100svh - 110px), 320px)); }
   .share-view-title { grid-column: 1; padding: 0; padding-inline-start: 48px; font-size: 24px; }
   .share-view-sub { grid-column: 1; padding: 0; text-wrap: pretty; }
   .share-view .share-url { grid-column: 1; margin-top: 12px; }

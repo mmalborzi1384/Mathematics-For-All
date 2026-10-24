@@ -348,6 +348,9 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       await page.$eval('[data-sum-scroll]', s => { s.scrollTop = s.scrollHeight; });
       await delay(90);
       await page.waitForFunction(() => window.__summary.state().activeAnims === 0, { timeout: 2500 });
+      /* the step ink glides on a CSS transition that is not a WAAPI anim:
+         let it land before measuring its alignment */
+      await page.waitForFunction(() => { const ink = document.querySelector('.sum-step-ink'); return !ink || ink.getAnimations().length === 0; }, { timeout: 2500 }).catch(() => {});
       const fullSweep = await page.evaluate(() => ({
         state: window.__summary.state(),
         stepInkAligned: (() => {
@@ -794,7 +797,11 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
           await page.waitForFunction((want) => {
             const d = document.getElementById('shareView');
             const lock = document.documentElement.classList.contains('share-lock');
-            return want === 'in' ? (d.open && d.classList.contains('is-in') && lock) : (!d.open && !lock && !d.classList.contains('is-in'));
+            if (want !== 'in') return !d.open && !lock && !d.classList.contains('is-in');
+            /* "in" also means the card has finished its entrance transform, so
+               a click / tap aimed at a control lands where the control is */
+            const card = d.querySelector('.share-view-card');
+            return d.open && d.classList.contains('is-in') && lock && getComputedStyle(card).transform === 'none';
           }, { timeout: 2500, polling: 40 }, want);
         } catch (e) { /* the assertion that follows reports the real state */ }
       };
@@ -870,9 +877,14 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         const trail = [];
         for (let i = 0; i < 8; i++) {
           await page.keyboard.press('Tab');
-          trail.push(await page.evaluate(() => document.activeElement.closest('#shareView') ? 'in' : (document.activeElement === document.body ? 'ui' : 'OUT')));
+          trail.push(await page.evaluate(() => { const a = document.activeElement; return a.closest('#shareView') ? (a.className.split(' ')[0] + (a.hasAttribute('data-share-copy') ? '.copy' : a.hasAttribute('download') ? '.dl' : '')) : 'OUT'; }));
         }
-        ok(!trail.includes('OUT') && trail.filter(x => x === 'in').length >= 6, `Tab never reaches the page behind the modal (${trail.join(' ')})`);
+        const nCtl = await page.evaluate(() => [...document.querySelectorAll('#shareView a[href], #shareView button')].filter(el => !el.hidden).length);
+        ok(trail.every(t => t !== 'OUT') && trail[0] === 'share-view-close' && trail[nCtl] === 'share-view-close', `Tab cycles through the card's ${nCtl} controls and never leaves it (${trail.join(' → ')})`);
+        await page.evaluate(() => document.querySelector('#shareView .share-view-close').focus());
+        await page.keyboard.down('Shift'); await page.keyboard.press('Tab'); await page.keyboard.up('Shift');
+        const back = await page.evaluate(() => document.activeElement.hasAttribute('download'));
+        ok(back, 'Shift+Tab from the close button wraps to the last control');
         const hiddenShown = await page.evaluate(() => [...document.querySelectorAll('#shareView [hidden], #share [hidden]')].filter(el => getComputedStyle(el).display !== 'none').length);
         ok(hiddenShown === 0, '[hidden] share controls are really display:none (not overridden by .share-btn)');
         await page.keyboard.press('Escape'); await settled(page, 'out');
