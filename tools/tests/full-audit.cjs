@@ -618,18 +618,28 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         const from = Math.max(0, spacer.getBoundingClientRect().top + scrollY - 2400);
         const to = spacer.getBoundingClientRect().top + scrollY + 4200;
         let bad = 0, samples = 0;
+        const detail = [];
         const step = async y => {
           window.scrollTo({ top: y, behavior: 'instant' });
           await sleep(20);
+          /* sample after the next frame: ScrollTrigger seats the stage in
+             its ticker, and a starved harness frame can run late */
+          await new Promise(r => requestAnimationFrame(r));
           const r = stage.getBoundingClientRect();
           samples++;
-          if (r.bottom > 0 && r.top < innerHeight && !near.has(centre())) bad++;
+          if (r.bottom > 0 && r.top < innerHeight && !near.has(centre())) {
+            bad++;
+            if (detail.length < 4) {
+              const st = ScrollTrigger.getById('zpdPin');
+              detail.push(`y=${Math.round(y)} centre=${centre()} stageTop=${Math.round(r.top)} ${getComputedStyle(stage).position} pin=${Math.round(st.start)}–${Math.round(st.end)} spacerTop=${Math.round(spacer.getBoundingClientRect().top + scrollY)}`);
+            }
+          }
         };
         for (let y = to; y >= from; y -= 120) await step(y);
         for (let y = from; y <= to; y += 120) await step(y);
-        return { bad, samples };
+        return { bad, samples, detail };
       });
-      ok(ghosts.bad === 0, `no ghost slide 23 anywhere between slides 21 and 27 (${ghosts.samples} samples)`);
+      ok(ghosts.bad === 0, `no ghost slide 23 anywhere between slides 21 and 27 (${ghosts.samples} samples)${ghosts.bad ? ' — ' + ghosts.detail.join(' | ') : ''}`);
 
       /* injected layout shift above the stage (1,600px) must self-heal */
       const healed = await page.evaluate(async () => {
@@ -776,6 +786,18 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         await page.evaluate(() => document.getElementById('share').scrollIntoView({ block: 'center', behavior: 'instant' }));
         await delay(1400);
       };
+      /* the entrance / exit classes land on real frames: wait for the state
+         rather than a fixed time, then assert it (the slow software
+         compositor behind this harness can stretch a frame past 200ms) */
+      const settled = async (page, want) => {
+        try {
+          await page.waitForFunction((want) => {
+            const d = document.getElementById('shareView');
+            const lock = document.documentElement.classList.contains('share-lock');
+            return want === 'in' ? (d.open && d.classList.contains('is-in') && lock) : (!d.open && !lock && !d.classList.contains('is-in'));
+          }, { timeout: 2500, polling: 40 }, want);
+        } catch (e) { /* the assertion that follows reports the real state */ }
+      };
 
       /* 6A — structure: one address everywhere, the QR in the card and the
          lightbox, the download link, the labelled dialog */
@@ -816,32 +838,32 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         const page = await fresh(1366, 768, false);
         let s = await state(page);
         ok(!s.open && !s.lock && !s.isIn, 'lightbox starts closed and unlocked');
-        await page.click('#hero .btn-share'); await delay(500);
+        await page.click('#hero .btn-share'); await settled(page, 'in');
         s = await state(page);
         ok(s.open && s.isIn && s.lock && s.y === 0, 'hero pill opens the lightbox (open + is-in + share-lock) without a scroll jump');
         ok(s.active === 'share-view-card', `focus moves into the card (${s.active})`);
         await page.keyboard.press('Escape'); await delay(80);
         s = await state(page);
         ok(s.open && !s.isIn, 'Esc plays the exit transition first (still open, is-in dropped)');
-        await delay(500);
+        await settled(page, 'out');
         s = await state(page);
         ok(!s.open && !s.lock && !s.isIn, 'closed, unlocked and clean after the exit');
         ok(/btn-share/.test(s.active), `focus returns to the hero opener (${s.active})`);
-        await page.click('#hero .btn-share'); await delay(400);
+        await page.click('#hero .btn-share'); await settled(page, 'in');
         await page.keyboard.press('Escape'); await delay(30); await page.keyboard.press('Escape'); await delay(40);
         s = await state(page);
         ok(!s.open && !s.lock && !s.isIn, 'a second Esc during the exit closes at once and cleans up synchronously');
-        await page.click('#tbShare'); await delay(450);
+        await page.click('#tbShare'); await settled(page, 'in');
         s = await state(page);
         ok(s.open && s.isIn, 'top-bar pill opens the lightbox');
-        await page.mouse.click(30, 400); await delay(500);
+        await page.mouse.click(30, 400); await settled(page, 'out');
         s = await state(page);
         ok(!s.open && !s.lock && s.active === 'tbShare', `backdrop click closes and focus returns to the top-bar pill (${s.active})`);
-        await page.click('#tbShare'); await delay(450);
-        await page.click('#shareView [data-share-close]'); await delay(500);
+        await page.click('#tbShare'); await settled(page, 'in');
+        await page.click('#shareView [data-share-close]'); await settled(page, 'out');
         ok(!(await state(page)).open, 'the close button closes');
         await page.evaluate(() => scrollTo(0, 0));
-        await page.click('#hero .btn-share'); await delay(450);
+        await page.click('#hero .btn-share'); await settled(page, 'in');
         await page.keyboard.press('ArrowDown'); await page.keyboard.press('PageDown'); await page.keyboard.press('ArrowRight'); await delay(700);
         s = await state(page);
         ok(s.open && s.y === 0, 'arrow / page keys do not drive the deck while the lightbox is open');
@@ -853,7 +875,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         ok(!trail.includes('OUT') && trail.filter(x => x === 'in').length >= 6, `Tab never reaches the page behind the modal (${trail.join(' ')})`);
         const hiddenShown = await page.evaluate(() => [...document.querySelectorAll('#shareView [hidden], #share [hidden]')].filter(el => getComputedStyle(el).display !== 'none').length);
         ok(hiddenShown === 0, '[hidden] share controls are really display:none (not overridden by .share-btn)');
-        await page.keyboard.press('Escape'); await delay(500);
+        await page.keyboard.press('Escape'); await settled(page, 'out');
 
         /* copy from the card, then from the lightbox */
         await toCard(page);
@@ -871,7 +893,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         ok(c1b.label === 'کپی پیوند' && !c1b.done, 'the copy button restores its label after the flash');
         await delay(1200);
         ok((await page.evaluate(() => document.querySelector('#share .share-status').textContent)) === '', 'the status line clears itself');
-        await page.click('#share .share-qr'); await delay(450);
+        await page.click('#share .share-qr'); await settled(page, 'in');
         s = await state(page);
         const yBefore = s.y;
         ok(s.open && s.isIn, 'the card\'s QR tile opens the lightbox');
@@ -879,7 +901,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         await page.click('#shareView [data-share-copy]'); await delay(250);
         const c2 = await page.evaluate(async () => ({ clip: await navigator.clipboard.readText(), status: document.querySelector('#shareView .share-status').textContent }));
         ok(c2.clip === CANON && c2.status === 'پیوند ارائه کپی شد.', 'copy works inside the lightbox too');
-        await page.keyboard.press('Escape'); await delay(500);
+        await page.keyboard.press('Escape'); await settled(page, 'out');
         s = await state(page);
         ok(!s.open && s.y === yBefore && /share-qr/.test(s.active), `closing returns to the same scroll position and the tile (${s.y} vs ${yBefore}, ${s.active})`);
         ok((await page.evaluate(() => document.querySelector('#shareView .share-status').textContent)) === '', 'the lightbox status is reset on close');
@@ -932,28 +954,46 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       /* 6E — phones: tap, fit, hidden top-bar pill, deep link, 320 */
       {
         let page = await fresh(390, 844, true);
-        ok((await page.evaluate(() => getComputedStyle(document.getElementById('tbShare')).display)) === 'none', 'the top-bar share pill steps aside on phones (≤480px)');
+        ok((await page.evaluate(() => getComputedStyle(document.getElementById('tbShare')).display)) === 'none', 'the top-bar share pill steps aside on phones (≤720px)');
         const heroRow = await page.evaluate(() => {
           const a = document.querySelector('#hero .btn-pdf').getBoundingClientRect(), b = document.querySelector('#hero .btn-share').getBoundingClientRect();
           return { sameRow: Math.abs(a.top - b.top) < 2, fit: a.left >= 0 && b.left >= 0 && a.right <= innerWidth && b.right <= innerWidth, h: Math.round(b.height) };
         });
         ok(heroRow.sameRow && heroRow.fit && heroRow.h >= 40, `hero PDF + share pills share one row at 390 (${heroRow.h}px tall)`);
-        await page.tap('#hero .btn-share'); await delay(500);
+        await page.tap('#hero .btn-share'); await settled(page, 'in');
         let s = await state(page);
         ok(s.open && s.isIn && s.lock, 'a tap opens the lightbox on a phone');
         const fit = await page.evaluate(() => { const c = document.querySelector('#shareView .share-view-card').getBoundingClientRect(); const card = document.querySelector('#shareView .share-view-card'); return { inside: c.left >= 0 && c.right <= innerWidth && c.top >= 0 && c.bottom <= innerHeight, scrolls: card.scrollHeight > card.clientHeight + 1, qr: Math.round(document.querySelector('.share-view-qr').getBoundingClientRect().width) }; });
         ok(fit.inside && !fit.scrolls && fit.qr >= 200, `the lightbox fits a 390×844 phone without inner scrolling (QR ${fit.qr}px)`);
-        await page.tap('#shareView [data-share-close]'); await delay(500);
+        await page.tap('#shareView [data-share-close]'); await settled(page, 'out');
         ok(!(await state(page)).open, 'a tap on the close button closes');
         await page.close();
 
         for (const vp of [{ w: 1366, h: 660 }, { w: 1280, h: 620 }, { w: 844, h: 390, mobile: true }]) {
           page = await fresh(vp.w, vp.h, !!vp.mobile);
-          await page.click('#hero .btn-share'); await delay(500);
+          await page.click('#hero .btn-share'); await settled(page, 'in');
           const f = await page.evaluate(() => { const card = document.querySelector('#shareView .share-view-card'); const c = card.getBoundingClientRect(); return { inside: c.top >= 0 && c.bottom <= innerHeight, scrolls: card.scrollHeight > card.clientHeight + 1, qr: Math.round(document.querySelector('.share-view-qr').getBoundingClientRect().width) }; });
           ok(f.inside && !f.scrolls && f.qr >= 160, `the lightbox fits ${vp.w}×${vp.h} without inner scrolling (QR ${f.qr}px)`);
           await page.close();
         }
+
+        /* the top bar: icon-only share pill on tablets, text from 901px, and
+           the brand never squeezed to an ellipsis where the pill shows */
+        page = await fresh(1366, 800, false);
+        const bar = [];
+        for (const w of [600, 667, 720, 721, 768, 834, 900, 901, 1024, 1366]) {
+          await page.setViewport({ width: w, height: 800, deviceScaleFactor: 1 });
+          await delay(150);
+          bar.push(await page.evaluate((w) => {
+            const t = document.querySelector('.topbar .tb-title'); const tr = t.getBoundingClientRect();
+            const pill = document.getElementById('tbShare');
+            const kids = [...document.querySelectorAll('.topbar .tb-actions > *')].filter(k => getComputedStyle(k).display !== 'none').map(k => k.getBoundingClientRect());
+            return { w, titleFull: tr.width > 0 && t.scrollWidth <= t.clientWidth + 0.5, pill: getComputedStyle(pill).display !== 'none', tx: getComputedStyle(pill.querySelector('.tb-share-tx')).display !== 'none', inside: kids.every(r => r.left >= 0 && r.right <= w), oneRow: (() => { const c = kids.map(r => r.top + r.height / 2); return Math.max(...c) - Math.min(...c) <= 2; })() };
+          }, w));
+        }
+        ok(bar.every(b => b.titleFull && b.inside && b.oneRow), `the brand stays whole and the controls stay on one row from 600px up (${bar.filter(b => !b.titleFull).map(b => b.w).join(',') || 'all'})`);
+        ok(bar.every(b => (b.w <= 720 ? !b.pill : b.pill) && (b.w > 900 ? b.tx : !b.tx)), 'the top-bar share pill: hidden ≤720, icon-only 721–900, with its label from 901px');
+        await page.close();
 
         page = await fresh(390, 844, true, { hash: '#share' });
         await delay(1200);

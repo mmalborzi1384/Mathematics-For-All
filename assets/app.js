@@ -495,10 +495,11 @@
     var card = shareView.querySelector(".share-view-card");
     if (card) { try { card.focus({ preventScroll: true }); } catch (e2) { card.focus(); } }
     if (reduced()) { shareView.classList.add("is-in"); return; }
-    /* two frames: the closed styles must paint before the transition starts */
-    requestAnimationFrame(function () {
-      requestAnimationFrame(function () { if (shareView.open) shareView.classList.add("is-in"); });
-    });
+    /* flush the closed styles first so the entrance transitions from them
+       (a forced style read, not a frame wait: deterministic even when
+       requestAnimationFrame is throttled) */
+    void shareView.offsetWidth;
+    shareView.classList.add("is-in");
   }
   /* idempotent: runs right after our own close() and again on the
      engine's close event (which is a queued task and can land late on a

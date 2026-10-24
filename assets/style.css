@@ -1556,6 +1556,11 @@ html.share-lock { overflow: hidden; scrollbar-gutter: stable; }
   opacity: 1;
   transform: none;
 }
+/* once revealed, the share card keeps following the theme switch */
+:root.js #closing .share-card.in {
+  transition: opacity 0.72s cubic-bezier(0.22, 1, 0.36, 1), transform 0.72s cubic-bezier(0.22, 1, 0.36, 1),
+              background-color 0.5s ease, border-color 0.5s ease;
+}
 
 /* pinned scene that cannot fit the viewport (or reduced motion):
    release the pin and show the whole diagram */
@@ -1580,6 +1585,9 @@ html.share-lock { overflow: hidden; scrollbar-gutter: stable; }
 
 /* ---------------------------------------------------------------- 14 responsive */
 @media (max-width: 900px) {
+  /* the share pill goes icon-only so the brand keeps its room on tablets */
+  .tb-share { padding: 10px 14px; }
+  .tb-share-tx { display: none; }
   /* the rail keeps one dot per chapter: labels would cover the text column */
   #rail { left: 6px; width: 22px; height: clamp(320px, 72vh, 660px); --rail-pad: 16px; }
   #rail { left: 6px; width: 22px; height: clamp(320px, 72svh, 660px); --rail-pad: 16px; }
@@ -1611,6 +1619,9 @@ html.share-lock { overflow: hidden; scrollbar-gutter: stable; }
 }
 
 @media (max-width: 720px) {
+  /* below tablet width the top bar gives the brand its room back: the
+     hero pill and the closing card still open the share view */
+  .tb-share { display: none; }
   .hero-cards { grid-template-columns: 1fr; }
   /* SVG labels are scaled by the viewBox: at phone widths a 16-unit label
      lands at ~7px, so lift the illustration labels back to readable size */
@@ -1625,8 +1636,8 @@ html.share-lock { overflow: hidden; scrollbar-gutter: stable; }
   .theme-toggle { width: 66px; height: 40px; padding-inline: 9px; }
   .theme-toggle .knob { width: 28px; height: 28px; top: 4px; }
   :root[data-theme="dark"] .theme-toggle .knob { transform: translateX(-27px); }
-  .tb-pdf, .tb-share { min-height: 40px; padding: 8px 12px; }
-  .tb-pdf-tx, .tb-share-tx { display: none; }
+  .tb-pdf { min-height: 40px; padding: 8px 12px; }
+  .tb-pdf-tx { display: none; }
   .share-card { grid-template-columns: 1fr; justify-items: stretch; text-align: center; }
   .share-qr { order: -1; margin-bottom: 10px; }
   .share-en { text-align: center; }
@@ -1650,16 +1661,12 @@ html.share-lock { overflow: hidden; scrollbar-gutter: stable; }
   .illus .tx, .illus .tx-en, .illus .tx-sage { font-size: 23px; }
 }
 
-@media (max-width: 480px) {
-  .tb-share { display: none; }
-}
-
 @media (max-width: 380px) {
   #fsToggle { display: none; }
   .topbar { padding-inline: 10px; }
   .topbar .tb-actions { gap: 5px; }
   .tb-btn { min-width: 38px; height: 38px; padding: 0 7px; }
-  .tb-pdf, .tb-share { min-height: 38px; padding: 7px 10px; }
+  .tb-pdf { min-height: 38px; padding: 7px 10px; }
   .theme-toggle { width: 62px; height: 38px; padding-inline: 8px; }
   .theme-toggle .knob { width: 26px; height: 26px; top: 4px; }
   :root[data-theme="dark"] .theme-toggle .knob { transform: translateX(-25px); }
