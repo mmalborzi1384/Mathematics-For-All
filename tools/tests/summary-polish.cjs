@@ -32,7 +32,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     return d && d.classList.contains('is-open') && d.classList.contains('is-settled');
    }, {timeout: 4000});
 
-   const origin = await page.$eval('dialog', d => [
+   const origin = await page.$eval('dialog.summary-dialog', d => [
     parseFloat(d.style.getPropertyValue('--summary-ox')),
     parseFloat(d.style.getPropertyValue('--summary-oy'))
    ]);
@@ -119,7 +119,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
    /* Orientation / large viewport expansion + print + reduced-motion checks */
    await page.setViewport({width: width + 300, height: 1000, deviceScaleFactor: 2});
    await page.waitForFunction(() => {
-    const d = document.querySelector('dialog');
+    const d = document.querySelector('dialog.summary-dialog');
     const x = parseFloat(d.style.getPropertyValue('--summary-ox'));
     const y = parseFloat(d.style.getPropertyValue('--summary-oy'));
     return parseFloat(d.style.getPropertyValue('--summary-radius')) >
@@ -130,18 +130,18 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
    await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
    await page.emulateMediaType('print');
    await delay(100);
-   ok(await page.$eval('dialog', d => getComputedStyle(d).position === 'static'), `print normal flow at ${width}`);
+   ok(await page.$eval('dialog.summary-dialog', d => getComputedStyle(d).position === 'static'), `print normal flow at ${width}`);
    ok(await page.$$eval('.summary-card', cards => cards.every(c => getComputedStyle(c).opacity === '1')), `all print cards visible at ${width}`);
    await page.emulateMediaType('screen');
    await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
-   ok(await page.$eval('dialog', d => d.open), `returns to modal after print at ${width}`);
+   ok(await page.$eval('dialog.summary-dialog', d => d.open), `returns to modal after print at ${width}`);
 
    await page.emulateMediaFeatures([{name: 'prefers-reduced-motion', value: 'reduce'}]);
    ok(await page.$$eval('.summary-card', cards => cards.every(c => getComputedStyle(c).opacity === '1')), `reduced motion reveals all cards at ${width}`);
    ok(await page.$eval('.summary-art', e => getComputedStyle(e).animationName === 'none'), `reduced motion stops book at ${width}`);
    await page.keyboard.press('Escape');
    await delay(150);
-   ok(await page.$eval('dialog', d => !d.open), `reduced motion instant close at ${width}`);
+   ok(await page.$eval('dialog.summary-dialog', d => !d.open), `reduced motion instant close at ${width}`);
    await page.close();
   }
 
