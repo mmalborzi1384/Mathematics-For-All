@@ -443,10 +443,14 @@
   function docTop(el) {
     return el.getBoundingClientRect().top + (window.scrollY || root.scrollTop || 0);
   }
-  /* A 768px-tall laptop cannot hold 36 clickable dots on one track
-     (they would be 3px apart), so it gets the same chapter-only rail as
-     a phone instead of an unreadable pile. */
-  function compactRail() { return window.innerWidth <= 900 || window.innerHeight < 800; }
+  /* A phone, or a desktop window under 600px tall, cannot hold 36
+     clickable dots on one track, so it gets the chapter-only rail. The
+     usual laptop viewport (1366×768, or 1080p at 150 % scaling — about
+     600–800px once the browser chrome is taken off) keeps every slide
+     station on a taller track at a 14–19px pitch instead of silently
+     dropping them; the CSS breakpoints in style.css use the same 600px. */
+  var RAIL_MIN_FULL_H = 600;
+  function compactRail() { return window.innerWidth <= 900 || window.innerHeight < RAIL_MIN_FULL_H; }
 
   var railPad = 14, railUsable = 1, railMode = "doc", railAnchors = [];
 
@@ -594,6 +598,9 @@
       layoutPending = false;
       layoutRail();
       onScroll(true);
+      /* the body changed height (fonts, images, a late reflow): the
+         pinned scene's offsets may be stale now — see zpdGuard */
+      if (zpdGuard) zpdGuard.height();
       if (layoutAgain) { layoutAgain = false; scheduleLayout(); }
     };
     requestAnimationFrame(function () { requestAnimationFrame(runPass); });
@@ -699,6 +706,43 @@
     goTo(id);
   });
 
+  /* A shared /#s26 link on a first visit: the browser scrolls to the
+     fragment while the Persian text is still set in the fallback face,
+     and the B Nazanin swap then shortens everything above the target by
+     thousands of pixels. Chrome's scroll anchoring usually compensates,
+     but when only the trailing padding of the previous section peeks out
+     under the top bar it anchors to *that* section and the reader is
+     left two slides further on (seen on phones). Browsers keep their own
+     fragment anchor only until `load`; the swap can land after it, so the
+     target is re-seated once the fonts settle — only on a fresh
+     navigation (a reload or back/forward restores the old position
+     instead) and only while the reader has not scrolled on their own. */
+  (function keepDeepLink() {
+    var id = (location.hash || "").slice(1);
+    var el = id && document.getElementById(id);
+    /* in-flow sections only — never the summary / people dialogs */
+    if (!el || !el.matches("section[id]") || !(el.closest("main") || id === "closing")) return;
+    if (!(document.fonts && document.fonts.ready)) return;
+    var nav = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+    if (nav && nav.type !== "navigate") return;
+    var armed = true;
+    function disarm() { armed = false; }
+    ["wheel", "touchstart", "keydown", "pointerdown"].forEach(function (t) {
+      window.addEventListener(t, disarm, { passive: true, capture: true, once: true });
+    });
+    function reseat() {
+      if (!armed) return;
+      var want = Math.max(0, Math.min(maxScroll(), docTop(el) - (id === "hero" ? 0 : TOP_OFFSET)));
+      if (Math.abs((window.scrollY || root.scrollTop || 0) - want) > 8) scrollNow(want);
+      /* once the faces are in, the layout is final: stand down (an engine
+         that resolves fonts.ready early still reports "loading" here and
+         gets its second chance from loadingdone) */
+      if (document.fonts.status === "loaded") disarm();
+    }
+    document.fonts.ready.then(reseat);
+    if (document.fonts.addEventListener) document.fonts.addEventListener("loadingdone", reseat);
+  })();
+
   var lastZoneKey = "";
   function updateActive() {
     if (!zones.length) return;
@@ -736,6 +780,7 @@
          motion) instead of hand-measured pixel guesses.
      Without GSAP — or when the pin is skipped — no start state is ever
      applied, so the finished diagram simply shows. */
+  var zpdGuard = null;
   var zpdWrap = document.querySelector(".zpd-wrap");
   if (zpdWrap && window.gsap && window.ScrollTrigger) {
     gsap.registerPlugin(ScrollTrigger);
@@ -797,9 +842,87 @@
         .to({}, { duration: 0.28 }, 0.72);
       zpdStepPaint(0);
     });
-    if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(function () { ScrollTrigger.refresh(); });
+    /* ScrollTrigger measures by scrolling the window to 0, reading the
+       trigger's offset and scrolling back — and it switches the inline
+       scroll-behavior to `auto` just before that scrollTo(0, 0) because
+       the stylesheet asks for `smooth`. Chrome, however, skips the style
+       flush for scrollTo(0, 0) (nothing to clamp) and resolves the
+       behaviour against the *stale* computed style: the measuring scroll
+       animates instead of jumping, the stage is read at the old offset
+       while the scroll cache says 0, and start comes out as
+       (real start − scrollY at refresh). Every refresh that runs while the
+       reader stands mid-page — the fonts.ready refresh after a reload, a
+       resize — lands the pin thousands of pixels off: slide 23 snaps on
+       screen on top of a later slide, rides along, lets go. Applying
+       `auto` ourselves at refreshInit and flushing style first makes the
+       measuring scroll instant (Firefox flushes anyway; this is a no-op
+       there). */
+    ScrollTrigger.addEventListener("refreshInit", function () {
+      root.style.scrollBehavior = "auto";
+      void getComputedStyle(root).scrollBehavior; /* the read is the flush */
+    });
+    /* Belt and braces: positions also go stale when the document above
+       the stage changes height after the last refresh — a late B Nazanin
+       swap reflows the twenty-two Persian slides by a few thousand pixels
+       on a machine without the font (Linux's DejaVu fallback is far
+       wider), and some engines resolve fonts.ready before a deferred
+       script has triggered a single load. So the pin verifies itself:
+       every refresh is checked against the spacer's real position and
+       repeated (with back-off) if it was wrong, every font batch
+       (`loadingdone`) and every body-height change re-measure, and every
+       scroll frame re-checks the recorded start (zpdGuard.check) — the
+       net under everything else, including engines we cannot test. */
+    var zpdRefreshT = 0, zpdRefreshDocH = 0, zpdRefreshes = 0, zpdRepairs = 0;
+    function zpdRefresh(delay) {
+      if (ScrollTrigger.isRefreshing || zpdRefreshT) return;
+      zpdRefreshT = setTimeout(function () {
+        zpdRefreshT = 0;
+        zpdRefreshes++;
+        ScrollTrigger.refresh();
+      }, delay || 80);
     }
+    function zpdDrift() {
+      var st = ScrollTrigger.getById("zpdPin");
+      if (!st || !st.pin) return 0;
+      var spacer = zpdStage.parentNode;
+      if (!spacer || !/\bpin-spacer\b/.test(spacer.className || "")) return 0;
+      return (spacer.getBoundingClientRect().top + (window.scrollY || root.scrollTop || 0)) - st.start;
+    }
+    /* one more refresh, 150ms → 2.4s apart while the drift persists */
+    function zpdRepair() {
+      zpdRepairs++;
+      zpdRefresh(Math.min(2400, 150 * Math.pow(2, Math.min(5, zpdRepairs - 1))));
+    }
+    ScrollTrigger.addEventListener("refresh", function () {
+      zpdRefreshDocH = root.scrollHeight;
+      if (Math.abs(zpdDrift()) > 2) zpdRepair();
+      else zpdRepairs = 0;
+      /* ScrollTrigger hands the inline scroll-behavior back as "smooth"
+         one frame later; drop it again so the stylesheet — and its
+         reduced-motion rule — stays the single source of truth */
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { root.style.scrollBehavior = ""; });
+      });
+    });
+    zpdGuard = {
+      check: function () {
+        if (ScrollTrigger.isRefreshing || zpdRefreshT) return;
+        if (Math.abs(zpdDrift()) > 2) zpdRepair();
+      },
+      height: function () {
+        if (zpdRefreshDocH && Math.abs(root.scrollHeight - zpdRefreshDocH) > 4) zpdRefresh();
+      },
+      drift: zpdDrift,
+      refreshes: function () { return zpdRefreshes; },
+      repairs: function () { return zpdRepairs; }
+    };
+    if (document.fonts) {
+      if (document.fonts.ready) document.fonts.ready.then(function () { ScrollTrigger.refresh(); });
+      if (document.fonts.addEventListener) document.fonts.addEventListener("loadingdone", function () { zpdRefresh(); });
+    }
+    /* bfcache restore / a reload that lands mid-page: measure once more
+       after the engine has settled its scroll restoration */
+    window.addEventListener("pageshow", function (e) { if (e.persisted) zpdRefresh(); });
   }
   /* ---------------------------------------------------------------- illustrations */
   var illus = [];
@@ -866,6 +989,9 @@
     lastY = y; lastVH = window.innerHeight; lastDocH = root.scrollHeight;
     var p = clamp01(y / max);
     lastProgress = p;
+    /* read before any write below: the layout is still clean here, so
+       the pinned scene's self-check costs nothing */
+    if (zpdGuard) zpdGuard.check();
     if (bar) bar.style.transform = "scaleX(" + p.toFixed(5) + ")";
     /* active zone first: the compact rail paints its solid line up to the
        lit chapter dot, so it has to know which chapter that is */
@@ -2046,7 +2172,12 @@
       return {
         pinned: !!st,
         static: zpdWrap ? zpdWrap.classList.contains("zpd-static") : null,
-        p: st ? +st.progress.toFixed(3) : null
+        p: st ? +st.progress.toFixed(3) : null,
+        start: st ? Math.round(st.start) : null,
+        end: st ? Math.round(st.end) : null,
+        drift: zpdGuard ? Math.round(zpdGuard.drift()) : null,
+        refreshes: zpdGuard ? zpdGuard.refreshes() : 0,
+        repairs: zpdGuard ? zpdGuard.repairs() : 0
       };
     }
   };

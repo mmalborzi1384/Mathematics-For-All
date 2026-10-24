@@ -10,7 +10,12 @@
         progressive 7-card WAAPI scroll reveals, smooth .sum-sheet gliding on
         .summary-jump / .sum-step / .summary-status, & .sum-step-ink alignment
      4) Complete 29-slide bilingual deck integrity, topbar controls, ZPD pin,
-        font loading, zero HTTP/console errors, and source/PDF byte invariance. */
+        font loading, zero HTTP/console errors, and source/PDF byte invariance.
+     5) Short-laptop rail (every slide station from 600px tall, chapter-only
+        below) and the #s23 ZPD pin staying exact through mid-page refreshes,
+        mid-page reloads with a late font swap, and injected layout shifts
+        (the Linux "slide 23 appears on later slides" regression); deep
+        links (/#s26) stay seated through a late webfont swap on phones. */
 const assert = require('node:assert/strict');
 const { execSync } = require('node:child_process');
 const puppeteer = require('puppeteer-core');
@@ -379,14 +384,14 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         allJustified,
         pdfOk: pdfRes.status === 200 && pdfBuf.byteLength === 921399,
         zpdReady: window.__rail.zpd().pinned === true,
-        cacheSynced: cacheTags.every(t => t && t.includes('?v=20261024a'))
+        cacheSynced: cacheTags.every(t => t && t.includes('?v=20261024b'))
       };
     });
     ok(deckAudit.exactOrder, 'all 29 scenes (#s2..#s30) present in exact PDF order');
     ok(deckAudit.allJustified, 'every slide translation & original paragraph remains text-align: justify');
     ok(deckAudit.pdfOk, 'assets/Mathematics-For-All.pdf serves 200 OK with exact 921,399 bytes');
     ok(deckAudit.zpdReady, 'Slide 23 (#s23) ZPD ScrollTrigger pin active and healthy');
-    ok(deckAudit.cacheSynced, 'style.css, app.js, and summary.js share unified cache-buster ?v=20261024a');
+    ok(deckAudit.cacheSynced, 'style.css, app.js, and summary.js share unified cache-buster ?v=20261024b');
 
     /* Verify #hero velvet opening choreography, Bidi Latin run order, & zero resting GPU layers */
     await deckPage.waitForFunction(() => window.__heroMotion && !window.__heroMotion.stats().animating, { timeout: 4000 });
@@ -463,6 +468,271 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       'rapid Escape -> Re-open -> Browser Back cleanly closes #people on first back');
 
     await deckPage.close();
+
+    /* ======================================================================
+       PART 5: Short laptop rail (600–849px) & #s23 pin exactness on reload
+       ====================================================================== */
+    /* 5A — the rail keeps all 36 stations on the common laptop viewports
+       (1366×768, 1366×660, 1280×620) and only drops to chapter-only below
+       600px; the first dot clears the 65px top bar and the last dot stays
+       above the bottom edge */
+    for (const vp of [
+      { width: 1366, height: 768, full: true },
+      { width: 1366, height: 660, full: true },
+      { width: 1280, height: 620, full: true },
+      { width: 1366, height: 560, full: false }
+    ]) {
+      const page = await browser.newPage();
+      const errors = [];
+      page.on('pageerror', e => errors.push(e.message));
+      await page.setViewport({ width: vp.width, height: vp.height, deviceScaleFactor: 1 });
+      await page.goto(base, { waitUntil: 'networkidle0' });
+      await page.evaluate(() => document.fonts.ready);
+      await delay(400);
+      const rail = await page.evaluate(() => {
+        const bar = document.querySelector('.topbar').getBoundingClientRect();
+        const links = [...document.querySelectorAll('#rail a')];
+        const shown = links.filter(a => getComputedStyle(a).display !== 'none');
+        const dots = shown.map(a => a.querySelector('.dot').getBoundingClientRect());
+        const centres = shown.map(a => { const b = a.getBoundingClientRect(); return b.top + b.height / 2; }).sort((x, y) => x - y);
+        let minGap = Infinity;
+        for (let i = 1; i < centres.length; i++) minGap = Math.min(minGap, centres[i] - centres[i - 1]);
+        return {
+          total: links.length,
+          shown: shown.length,
+          sceneDotsHidden: links.filter(a => a.classList.contains('s-dot')).every(a => getComputedStyle(a).display === 'none'),
+          firstDotTop: Math.min(...dots.map(d => d.top)),
+          lastDotBottom: Math.max(...dots.map(d => d.bottom)),
+          barBottom: bar.bottom,
+          minGap
+        };
+      });
+      const tag = `${vp.width}x${vp.height}`;
+      ok(rail.total === 36, `rail holds 36 stations in the DOM at ${tag}`);
+      if (vp.full) {
+        ok(rail.shown === 36, `short laptop keeps every slide station visible (${rail.shown}/36) at ${tag}`);
+        ok(rail.minGap >= 13, `short-laptop rail pitch stays clickable (${rail.minGap.toFixed(1)}px) at ${tag}`);
+      } else {
+        ok(rail.shown === 7 && rail.sceneDotsHidden, `sub-600px window falls back to the chapter-only rail (${rail.shown}) at ${tag}`);
+      }
+      ok(rail.firstDotTop >= rail.barBottom, `first rail dot clears the top bar (${rail.firstDotTop.toFixed(1)} >= ${rail.barBottom}) at ${tag}`);
+      ok(rail.lastDotBottom <= vp.height - 8, `last rail dot stays above the bottom edge at ${tag}`);
+      ok(errors.length === 0, `zero JS errors on the short-laptop rail at ${tag}`);
+      await page.close();
+    }
+
+    /* 5B — ScrollTrigger refresh mid-page: Chrome resolves scrollTo(0, 0)
+       against the stale computed scroll-behavior, so without the
+       refreshInit style flush every mid-page refresh measured the pin
+       (real start − scrollY) too early; the pin must stay exact after a
+       refresh issued at slide 26, after a reload that lands at slide 26
+       with the webfont arriving late, and after an injected layout shift */
+    {
+      const page = await browser.newPage();
+      const errors = [];
+      page.on('pageerror', e => errors.push(e.message));
+      await page.setViewport({ width: 1366, height: 660, deviceScaleFactor: 1 });
+      await page.evaluateOnNewDocument(() => {
+        window.__zpdLog = [];
+        document.addEventListener('DOMContentLoaded', () => {
+          if (!window.ScrollTrigger) return;
+          ScrollTrigger.addEventListener('refresh', () => {
+            const st = ScrollTrigger.getById('zpdPin');
+            const spacer = document.querySelector('.pin-spacer');
+            if (!st || !spacer) return;
+            const real = spacer.getBoundingClientRect().top + scrollY;
+            window.__zpdLog.push({ start: Math.round(st.start), real: Math.round(real), bad: Math.abs(st.start - real) > 2 });
+          });
+        });
+      });
+      let delayFont = false;
+      await page.setRequestInterception(true);
+      page.on('request', req => {
+        if (delayFont && /BNazanin/.test(req.url())) setTimeout(() => req.continue().catch(() => {}), 900);
+        else req.continue().catch(() => {});
+      });
+      await page.setCacheEnabled(false);
+      await page.goto(base, { waitUntil: 'networkidle0' });
+      await page.evaluate(() => document.fonts.ready);
+      await delay(500);
+      await page.evaluate(() => {
+        const el = document.getElementById('s26');
+        window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - 40, behavior: 'instant' });
+      });
+      await delay(600);
+      const midRefresh = await page.evaluate(() => {
+        ScrollTrigger.refresh();
+        const z = window.__rail.zpd();
+        return { drift: z.drift, start: z.start, scrollY: Math.round(scrollY), pinned: z.pinned };
+      });
+      ok(midRefresh.pinned && Math.abs(midRefresh.drift) <= 2,
+        `ScrollTrigger.refresh() issued at slide 26 (scrollY ${midRefresh.scrollY}) keeps the #s23 pin exact (drift ${midRefresh.drift}px)`);
+
+      /* reload mid-page with the webfont 900ms late: Chrome restores the
+         scroll first, the Persian slides reflow when B Nazanin lands */
+      delayFont = true;
+      await page.evaluate(() => { window.__zpdLog = []; });
+      await page.reload({ waitUntil: 'load' });
+      await page.evaluate(() => document.fonts.ready);
+      await delay(1400);
+      const afterReload = await page.evaluate(() => {
+        const z = window.__rail.zpd();
+        let centre = null;
+        for (const el of document.querySelectorAll('#hero, .chapter, .scene, #closing')) {
+          const b = el.getBoundingClientRect();
+          if (b.top <= innerHeight / 2 && b.bottom > innerHeight / 2) { centre = el.id; break; }
+        }
+        return { drift: z.drift, start: z.start, repairs: z.repairs, pinned: z.pinned, centre, fontLoaded: document.fonts.check('16px "B Nazanin"'),
+          refreshes: window.__zpdLog.length, corrupted: window.__zpdLog.filter(l => l.bad).length };
+      });
+      delayFont = false;
+      ok(afterReload.fontLoaded, 'late B Nazanin arrived after the mid-page reload');
+      ok(afterReload.pinned && Math.abs(afterReload.drift) <= 2,
+        `#s23 pin exact after a mid-page reload with a late font swap (drift ${afterReload.drift}px, ${afterReload.refreshes} refreshes, ${afterReload.repairs} repairs)`);
+      ok(afterReload.corrupted === 0, `no ScrollTrigger refresh measured the pin at a stale offset after the reload (${afterReload.corrupted}/${afterReload.refreshes})`);
+      ok(afterReload.centre === 's26' || afterReload.centre === 's25' || afterReload.centre === 's27',
+        `reload lands back on the slide the reader left (${afterReload.centre})`);
+
+      /* ghost sweep: walk the page from slide 27 back up to slide 21 and
+         down again — the stage may only be on screen around slide 23 */
+      const ghosts = await page.evaluate(async () => {
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const stage = document.querySelector('.zpd-stage');
+        const near = new Set(['s22', 'ch3', 's23', 's24']);
+        const centre = () => {
+          for (const el of document.querySelectorAll('#hero, .chapter, .scene, #closing')) {
+            const b = el.getBoundingClientRect();
+            if (b.top <= innerHeight / 2 && b.bottom > innerHeight / 2) return el.id;
+          }
+          return null;
+        };
+        const spacer = document.querySelector('.pin-spacer');
+        const from = Math.max(0, spacer.getBoundingClientRect().top + scrollY - 2400);
+        const to = spacer.getBoundingClientRect().top + scrollY + 4200;
+        let bad = 0, samples = 0;
+        const step = async y => {
+          window.scrollTo({ top: y, behavior: 'instant' });
+          await sleep(20);
+          const r = stage.getBoundingClientRect();
+          samples++;
+          if (r.bottom > 0 && r.top < innerHeight && !near.has(centre())) bad++;
+        };
+        for (let y = to; y >= from; y -= 120) await step(y);
+        for (let y = from; y <= to; y += 120) await step(y);
+        return { bad, samples };
+      });
+      ok(ghosts.bad === 0, `no ghost slide 23 anywhere between slides 21 and 27 (${ghosts.samples} samples)`);
+
+      /* injected layout shift above the stage (1,600px) must self-heal */
+      const healed = await page.evaluate(async () => {
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const before = window.__rail.zpd().start;
+        document.getElementById('s12').style.marginBottom = '1600px';
+        const t0 = performance.now();
+        let z = window.__rail.zpd();
+        while (performance.now() - t0 < 2500 && !(z.start === before + 1600 && Math.abs(z.drift) <= 2)) { await sleep(50); z = window.__rail.zpd(); }
+        const result = { before, after: z.start, drift: z.drift, ms: Math.round(performance.now() - t0) };
+        document.getElementById('s12').style.marginBottom = '';
+        await sleep(600);
+        result.restored = window.__rail.zpd().start === before && Math.abs(window.__rail.zpd().drift) <= 2;
+        return result;
+      });
+      ok(healed.after === healed.before + 1600 && Math.abs(healed.drift) <= 2 && healed.restored,
+        `#s23 pin re-measures itself after a 1,600px layout shift above it (${healed.before} -> ${healed.after} in ${healed.ms}ms, restored ${healed.restored})`);
+      ok(errors.length === 0, `zero JS errors in the #s23 pin exactness QA: ${errors.join('; ')}`);
+      await page.close();
+    }
+
+    /* 5C — a shared /#s26 link on a phone, first visit: the browser seats
+       the fragment in the fallback face, B Nazanin lands later and
+       shortens everything above by thousands of pixels; Chrome's scroll
+       anchoring does not always compensate (it left the reader on slide
+       28), so app.js re-seats the target once the fonts settle — but only
+       on a fresh navigation and only if the reader has not scrolled. */
+    {
+      const errors = [];
+      let delayFont = 0;
+      const open = async (w, h, mobile) => {
+        const page = await browser.newPage();
+        page.on('pageerror', e => errors.push(e.message));
+        await page.setViewport({ width: w, height: h, deviceScaleFactor: 1, isMobile: mobile, hasTouch: mobile });
+        await page.setCacheEnabled(false);
+        await page.setRequestInterception(true);
+        page.on('request', req => {
+          if (delayFont && /BNazanin/.test(req.url())) setTimeout(() => req.continue().catch(() => {}), delayFont);
+          else req.continue().catch(() => {});
+        });
+        return page;
+      };
+      const seat = (page, id) => page.evaluate((id) => {
+        const el = document.getElementById(id);
+        let centre = null;
+        for (const s of document.querySelectorAll('#hero, .chapter, .scene, #closing')) {
+          const b = s.getBoundingClientRect();
+          if (b.top <= innerHeight / 2 && b.bottom > innerHeight / 2) { centre = s.id; break; }
+        }
+        return { top: Math.round(el.getBoundingClientRect().top), scrollY: Math.round(scrollY), centre,
+          nav: performance.getEntriesByType('navigation')[0].type, fontLoaded: document.fonts.check('16px "B Nazanin"') };
+      }, id);
+
+      for (const [w, h, mobile, id] of [[390, 844, true, 's26'], [390, 844, true, 's29'], [1366, 660, false, 's10']]) {
+        delayFont = 1200;
+        const page = await open(w, h, mobile);
+        await page.goto(`${base}#${id}`, { waitUntil: 'domcontentloaded' });
+        const first = await seat(page, id);
+        await page.evaluate(() => document.fonts.ready);
+        await delay(900);
+        const after = await seat(page, id);
+        ok(first.top >= 60 && first.top <= 90 && after.fontLoaded,
+          `${w}×${h} /#${id}: the browser seats the fragment first (top ${first.top}px) and the late B Nazanin arrives afterwards`);
+        ok(after.top >= 60 && after.top <= 90 && after.centre === id,
+          `${w}×${h} /#${id} stays seated through the font swap (top ${after.top}px, scrollY ${first.scrollY} -> ${after.scrollY}, centre ${after.centre})`);
+        await page.close();
+      }
+
+      /* a reload carries the last rail hash but the browser restores the
+         real position — the restored position must win */
+      {
+        delayFont = 0;
+        const page = await open(390, 844, true);
+        await page.goto(base, { waitUntil: 'networkidle0' });
+        await page.evaluate(() => {
+          history.replaceState(null, '', '#s26');
+          const el = document.getElementById('s29');
+          window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - 74, behavior: 'instant' });
+        });
+        await delay(500);
+        delayFont = 1200;
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await page.evaluate(() => document.fonts.ready);
+        await delay(900);
+        const r = await seat(page, 's29');
+        ok(r.nav === 'reload' && r.centre === 's29' && r.top >= 60 && r.top <= 90,
+          `a reload with a stale #s26 hash keeps the restored slide 29 (top ${r.top}px, navigation ${r.nav})`);
+        await page.close();
+      }
+
+      /* the reader swipes before the font lands: never pulled back */
+      {
+        delayFont = 1500;
+        const page = await open(390, 844, true);
+        await page.goto(`${base}#s26`, { waitUntil: 'domcontentloaded' });
+        await delay(250);
+        await page.touchscreen.touchStart(200, 640);
+        await page.touchscreen.touchMove(200, 340);
+        await page.touchscreen.touchEnd();
+        await delay(300);
+        const moved = await page.evaluate(() => Math.round(scrollY));
+        await page.evaluate(() => document.fonts.ready);
+        await delay(900);
+        const r = await seat(page, 's26');
+        ok(r.fontLoaded && !(r.top >= 60 && r.top <= 90),
+          `a reader who already swiped is not pulled back to the fragment when the font lands (scrollY ${moved} -> ${r.scrollY})`);
+        await page.close();
+      }
+      ok(errors.length === 0, `zero JS errors in the deep-link seating QA: ${errors.join('; ')}`);
+    }
+
     console.log(`PASS ${checks} full-site audit assertions`);
   } finally {
     await browser.close();
