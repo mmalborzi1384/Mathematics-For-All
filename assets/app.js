@@ -522,12 +522,15 @@
     if (reduced()) fin(); else shareCloseT = setTimeout(fin, 330);
   }
   if (shareView) {
-    /* Esc: play the exit first; if the engine refuses the cancel, the
-       close handler below still cleans up */
+    /* Esc: play the exit first; a second Esc mid-exit finishes at once.
+       If the engine refuses the cancel (no activation), the close handler
+       below still cleans up */
     shareView.addEventListener("cancel", function (e) {
-      if (!shareView.classList.contains("is-in")) return;
       e.preventDefault();
-      shareClose();
+      if (shareView.classList.contains("is-in")) { shareClose(); return; }
+      clearTimeout(shareCloseT);
+      if (shareView.open) shareView.close();
+      shareSettle();
     });
     shareView.addEventListener("close", shareSettle);
     /* a click on the backdrop reaches the dialog element itself */
