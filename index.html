@@ -42,7 +42,7 @@
     </script>
     <link rel="preload" href="assets/BNazanin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="assets/BNazaninBold.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="assets/style.css?v=20261024b" />
+    <link rel="stylesheet" href="assets/style.css?v=20261024c" />
   </head>
   <body>
     <div id="progress" aria-hidden="true"></div>
@@ -62,6 +62,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m6.5 10.5 5.5 5.5 5.5-5.5"/><path d="M4 20h16"/></svg>
           <span class="tb-pdf-tx">دانلود PDF</span>
         </a>
+        <button class="tb-share" id="tbShare" type="button" data-share-open aria-haspopup="dialog" aria-controls="shareView" aria-label="اشتراک‌گذاری ارائه">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.3 10.8 7.4-4.4M8.3 13.2l7.4 4.4"/></svg>
+          <span class="tb-share-tx">اشتراک‌گذاری</span>
+        </button>
         <div class="tb-group" role="group" aria-label="اندازه‌ی متن">
           <button class="tb-btn" id="fsDown" type="button" aria-label="کوچک‌تر کردن متن">A−</button>
           <button class="tb-btn" id="fsUp" type="button" aria-label="بزرگ‌تر کردن متن">A+</button>
@@ -111,11 +115,18 @@
           </div>
           <div class="presenters">ارائه‌دهندگان: محمدمهدی البرزی، امیررضا واحدی، محمدمهدی قنبری افرا</div>
           <div class="hero-actions">
-            <a class="btn-pdf" href="assets/Mathematics-For-All.pdf" download="Mathematics-For-All.pdf">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m6.5 10.5 5.5 5.5 5.5-5.5"/><path d="M4 20h16"/></svg>
-              <span class="bp-fa">دانلود PDF</span>
-              <span class="bp-en" dir="ltr" lang="en">Download PDF</span>
-            </a>
+            <div class="hero-cta">
+              <a class="btn-pdf" href="assets/Mathematics-For-All.pdf" download="Mathematics-For-All.pdf">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m6.5 10.5 5.5 5.5 5.5-5.5"/><path d="M4 20h16"/></svg>
+                <span class="bp-fa">دانلود PDF</span>
+                <span class="bp-en" dir="ltr" lang="en">Download PDF</span>
+              </a>
+              <button class="btn-share" type="button" data-share-open aria-haspopup="dialog" aria-controls="shareView">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.3 10.8 7.4-4.4M8.3 13.2l7.4 4.4"/></svg>
+                <span class="bs-fa">اشتراک‌گذاری</span>
+                <span class="bs-en" dir="ltr" lang="en">Share · QR</span>
+              </button>
+            </div>
             <a class="scroll-cue" href="#ch1" id="scrollCue">
               برای خواندن، اسکرول کنید
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 9.5 7 7 7-7"/></svg>
@@ -422,9 +433,43 @@
             <span class="bp-fa">دانلود PDF</span>
             <span class="bp-en" dir="ltr" lang="en">Download PDF</span>
           </a>
+          <section class="share-card" id="share" aria-labelledby="shareTitle">
+            <div class="share-text">
+              <h2 class="share-title" id="shareTitle">اشتراک‌گذاری ارائه</h2>
+              <p class="share-sub">کد را اسکن کنید یا پیوند را کپی کنید تا این ارائه روی هر دستگاهی باز شود.</p>
+              <p class="share-en" dir="ltr" lang="en">Scan the code or copy the link to open this presentation on any device.</p>
+              <code class="share-url" id="shareUrl" dir="ltr" lang="en" translate="no">mmalborzi1384.github.io/<wbr>Mathematics-For-All</code>
+              <div class="share-actions">
+                <button class="share-btn" type="button" data-share-copy><svg class="ic-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><svg class="ic-done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><span class="share-btn-tx">کپی پیوند</span></button>
+                <button class="share-btn" type="button" data-share-native hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.3 10.8 7.4-4.4M8.3 13.2l7.4 4.4"/></svg><span class="share-btn-tx">اشتراک‌گذاری…</span></button>
+                <a class="share-btn" href="assets/qr-mathematics-for-all.png" download="Mathematics-For-All-QR.png"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m6.5 10.5 5.5 5.5 5.5-5.5"/><path d="M4 20h16"/></svg><span class="share-btn-tx">دانلود کد QR</span></a>
+              </div>
+              <p class="share-status" role="status" aria-live="polite"></p>
+            </div>
+            <button class="share-qr" type="button" data-share-open aria-haspopup="dialog" aria-controls="shareView" aria-label="نمایش بزرگ کد QR">
+              <img src="assets/qr-mathematics-for-all.png" width="500" height="500" alt="کد QR پیوند ارائه‌ی Mathematics For All" loading="lazy" decoding="async">
+              <span class="share-qr-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V5a1 1 0 0 1 1-1h4"/><path d="M15 4h4a1 1 0 0 1 1 1v4"/><path d="M20 15v4a1 1 0 0 1-1 1h-4"/><path d="M9 20H5a1 1 0 0 1-1-1v-4"/></svg><span>نمایش بزرگ</span></span>
+            </button>
+          </section>
           <div class="colophon">Mathematics For All · آموزش ریاضی ۱</div>
         </div>
       </section>
+
+    <dialog class="share-view" id="shareView" aria-labelledby="shareViewTitle">
+      <div class="share-view-card" tabindex="-1">
+        <button class="share-view-close" type="button" data-share-close aria-label="بستن"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+        <h2 class="share-view-title" id="shareViewTitle">اسکن کنید</h2>
+        <p class="share-view-sub">Mathematics For All · ارائه‌ی درس آموزش ریاضی ۱</p>
+        <img class="share-view-qr" src="assets/qr-mathematics-for-all.png" width="500" height="500" alt="کد QR پیوند ارائه‌ی Mathematics For All" decoding="async">
+        <code class="share-url share-view-url" dir="ltr" lang="en" translate="no">mmalborzi1384.github.io/<wbr>Mathematics-For-All</code>
+        <div class="share-actions">
+          <button class="share-btn" type="button" data-share-copy><svg class="ic-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><svg class="ic-done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><span class="share-btn-tx">کپی پیوند</span></button>
+          <button class="share-btn" type="button" data-share-native hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.3 10.8 7.4-4.4M8.3 13.2l7.4 4.4"/></svg><span class="share-btn-tx">اشتراک‌گذاری…</span></button>
+          <a class="share-btn" href="assets/qr-mathematics-for-all.png" download="Mathematics-For-All-QR.png"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m6.5 10.5 5.5 5.5 5.5-5.5"/><path d="M4 20h16"/></svg><span class="share-btn-tx">دانلود کد QR</span></a>
+        </div>
+        <p class="share-status" role="status" aria-live="polite"></p>
+      </div>
+    </dialog>
     <button id="toTop" type="button" aria-label="بازگشت به بالای صفحه">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 14.5 7-7 7 7"/></svg>
     </button>
@@ -432,7 +477,7 @@
     <script src="assets/vendor/gsap/gsap.min.js" defer></script>
     <script src="assets/vendor/gsap/ScrollTrigger.min.js" defer></script>
     <script src="assets/vendor/motion.js" defer></script>
-    <script src="assets/app.js?v=20261024b" defer></script>
-    <script src="assets/summary.js?v=20261024b" defer></script>
+    <script src="assets/app.js?v=20261024c" defer></script>
+    <script src="assets/summary.js?v=20261024c" defer></script>
   </body>
 </html>

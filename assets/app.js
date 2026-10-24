@@ -395,6 +395,161 @@
     });
   }
 
+  /* ---------------------------------------------------------------- share: link + QR
+     The canonical address is the single source of truth (the QR in
+     assets/ encodes the same page). Three entries — hero pill, top bar,
+     the closing card's code — open one <dialog> lightbox with a
+     projector-sized code; copy uses the async clipboard with the
+     execCommand fallback, and the native share sheet is offered only
+     where navigator.share exists (phones, Windows/macOS browsers). The
+     dialog animates in through a class so the exit can play too; with
+     reduced motion both are instant. */
+  var shareView = document.getElementById("shareView");
+  var shareOpener = null, shareCloseT = 0;
+  var SHARE_URL = (function () {
+    var c = document.querySelector('link[rel="canonical"]');
+    return (c && c.href) || location.href.split("#")[0];
+  })();
+  var SHARE_TITLE = "Mathematics For All — ریاضیات برای همه";
+  var SHARE_TEXT = "ریاضیات برای همه: پر کردن شکاف برای یادگیرندگان محروم و بااستعداد · ارائه‌ی درس آموزش ریاضی ۱";
+  function shareCanNative() {
+    try { return !!(navigator.share && (!navigator.canShare || navigator.canShare({ url: SHARE_URL }))); }
+    catch (e) { return false; }
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("[data-share-native]"), function (b) {
+    b.hidden = !shareCanNative();
+  });
+  function shareStatus(from, msg) {
+    var scope = from && from.closest ? from.closest(".share-card, .share-view-card") : null;
+    var out = scope ? scope.querySelector(".share-status") : null;
+    if (!out) return;
+    out.textContent = msg || "";
+    clearTimeout(out._t);
+    if (msg) out._t = setTimeout(function () { out.textContent = ""; }, 3200);
+  }
+  function shareFlash(btn, ok) {
+    var tx = btn.querySelector(".share-btn-tx");
+    if (!tx) return;
+    if (!btn._label) btn._label = tx.textContent;
+    clearTimeout(btn._t);
+    btn.classList.toggle("is-done", !!ok);
+    tx.textContent = ok ? "کپی شد" : btn._label;
+    btn._t = setTimeout(function () {
+      btn.classList.remove("is-done");
+      tx.textContent = btn._label;
+    }, 2200);
+  }
+  function shareLegacyCopy() {
+    var ta = document.createElement("textarea");
+    ta.value = SHARE_URL;
+    ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none";
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+  function shareCopy(btn) {
+    function done(ok) {
+      shareFlash(btn, ok);
+      shareStatus(btn, ok ? "پیوند ارائه کپی شد." : "کپی خودکار ممکن نبود؛ نشانی را از کادر بالا انتخاب و کپی کنید.");
+      if (!ok) {
+        var scope = btn.closest(".share-card, .share-view-card");
+        var code = scope && scope.querySelector(".share-url");
+        if (code && window.getSelection && document.createRange) {
+          var r = document.createRange(); r.selectNodeContents(code);
+          var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        }
+      }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+      navigator.clipboard.writeText(SHARE_URL).then(function () { done(true); }, function () { done(shareLegacyCopy()); });
+    } else {
+      done(shareLegacyCopy());
+    }
+  }
+  function shareNative(btn) {
+    if (!shareCanNative()) { shareCopy(btn); return; }
+    var p;
+    try { p = navigator.share({ title: SHARE_TITLE, text: SHARE_TEXT, url: SHARE_URL }); }
+    catch (e) { shareCopy(btn); return; }
+    if (p && p.then) {
+      p.then(function () { shareStatus(btn, "سپاس! ارائه به اشتراک گذاشته شد."); }, function (err) {
+        if (err && err.name === "AbortError") return;   /* the reader closed the sheet */
+        shareCopy(btn);
+      });
+    }
+  }
+  function shareOpen(from) {
+    if (!shareView || typeof shareView.showModal !== "function") {
+      goTo("share");   /* no <dialog>: the closing card has the same content */
+      return;
+    }
+    if (shareView.open) return;
+    shareOpener = from && from.focus ? from : null;
+    clearTimeout(shareCloseT);
+    root.classList.add("share-lock");
+    try { shareView.showModal(); } catch (e) { root.classList.remove("share-lock"); goTo("share"); return; }
+    var card = shareView.querySelector(".share-view-card");
+    if (card) { try { card.focus({ preventScroll: true }); } catch (e2) { card.focus(); } }
+    if (reduced()) { shareView.classList.add("is-in"); return; }
+    /* two frames: the closed styles must paint before the transition starts */
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { if (shareView.open) shareView.classList.add("is-in"); });
+    });
+  }
+  /* idempotent: runs right after our own close() and again on the
+     engine's close event (which is a queued task and can land late on a
+     busy frame), so the scroll lock never outlives the dialog */
+  function shareSettle() {
+    clearTimeout(shareCloseT);
+    shareView.classList.remove("is-in");
+    root.classList.remove("share-lock");
+    shareStatus(shareView.querySelector(".share-view-card"), "");
+    var back = shareOpener;
+    shareOpener = null;
+    if (back && document.contains(back)) {
+      try { back.focus({ preventScroll: true }); } catch (e) { back.focus(); }
+    }
+  }
+  function shareClose() {
+    if (!shareView || !shareView.open) return;
+    shareView.classList.remove("is-in");
+    var fin = function () { if (shareView.open) shareView.close(); shareSettle(); };
+    clearTimeout(shareCloseT);
+    if (reduced()) fin(); else shareCloseT = setTimeout(fin, 330);
+  }
+  if (shareView) {
+    /* Esc: play the exit first; if the engine refuses the cancel, the
+       close handler below still cleans up */
+    shareView.addEventListener("cancel", function (e) {
+      if (!shareView.classList.contains("is-in")) return;
+      e.preventDefault();
+      shareClose();
+    });
+    shareView.addEventListener("close", shareSettle);
+    /* a click on the backdrop reaches the dialog element itself */
+    shareView.addEventListener("click", function (e) { if (e.target === shareView) shareClose(); });
+    shareView.addEventListener("touchmove", function (e) { if (e.target === shareView) e.preventDefault(); }, { passive: false });
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target && e.target.closest ? e.target.closest("[data-share-open],[data-share-close],[data-share-copy],[data-share-native]") : null;
+    if (!t) return;
+    if (t.hasAttribute("data-share-open")) { e.preventDefault(); shareOpen(t); }
+    else if (t.hasAttribute("data-share-close")) shareClose();
+    else if (t.hasAttribute("data-share-copy")) shareCopy(t);
+    else if (t.hasAttribute("data-share-native")) shareNative(t);
+  });
+  window.__share = {
+    isOpen: function () { return !!(shareView && shareView.open); },
+    open: shareOpen,
+    close: shareClose,
+    url: SHARE_URL,
+    canNative: shareCanNative
+  };
+
   /* ==================================================================
      RAIL
      Dots are appended at runtime (one per scene) and every position is
@@ -721,7 +876,7 @@
     var id = (location.hash || "").slice(1);
     var el = id && document.getElementById(id);
     /* in-flow sections only — never the summary / people dialogs */
-    if (!el || !el.matches("section[id]") || !(el.closest("main") || id === "closing")) return;
+    if (!el || !el.matches("section[id]") || !el.closest("main, #closing")) return;
     if (!(document.fonts && document.fonts.ready)) return;
     var nav = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
     if (nav && nav.type !== "navigate") return;
@@ -1053,7 +1208,7 @@
      used to leave cards at opacity:0 for good) is rescued by the
      one-shot sweep below. */
   var rvEls = Array.prototype.slice.call(document.querySelectorAll(".rv"));
-  var closingBits = document.querySelectorAll("#closing .thanks-card, #closing .presenters, #closing .btn-pdf, #closing .colophon");
+  var closingBits = document.querySelectorAll("#closing .thanks-card, #closing .presenters, #closing .btn-pdf, #closing .share-card, #closing .colophon");
   var closingRv = Array.prototype.slice.call(closingBits);
   var allRv = rvEls.concat(closingRv);
 
@@ -1080,6 +1235,13 @@
       if (ten) tsWipe(ten, { delay: 135, duration: 500 });
     } else if (el.classList.contains("presenters")) {
       tsStream(el, { delay: 60, window: 400, duration: 280, soft: true });
+    } else if (el.classList.contains("share-card")) {
+      var shT = el.querySelector(".share-title");
+      var shS = el.querySelector(".share-sub");
+      var shE = el.querySelector(".share-en");
+      if (shT) tsWipe(shT, { delay: 55, duration: 460 });
+      if (shS) tsStream(shS, { delay: 120, window: 420, duration: 280, soft: true });
+      if (shE) tsStream(shE, { delay: 200, window: 420, duration: 280, soft: true });
     } else {
       var bFa = el.querySelector && el.querySelector(".boxin-fa");
       var bEn = el.querySelector && el.querySelector(".boxin-en");
@@ -1215,7 +1377,7 @@
   });
 
   document.addEventListener("keydown", function (e) {
-    if (e.metaKey || e.ctrlKey || e.altKey || root.classList.contains("summary-lock") || root.classList.contains("ppl-lock")) return;
+    if (e.metaKey || e.ctrlKey || e.altKey || root.classList.contains("summary-lock") || root.classList.contains("ppl-lock") || root.classList.contains("share-lock")) return;
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     var t = e.target;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
